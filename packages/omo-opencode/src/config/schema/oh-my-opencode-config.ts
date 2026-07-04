@@ -19,6 +19,7 @@ import { NotificationConfigSchema } from "./notification"
 import { OpenClawConfigSchema } from "./openclaw"
 import { ModelCapabilitiesConfigSchema } from "./model-capabilities"
 import { MonitorConfigSchema } from "./monitor"
+import { OtelConfigSchema } from "./otel"
 import { RalphLoopConfigSchema } from "./ralph-loop"
 import { RuntimeFallbackConfigSchema } from "./runtime-fallback"
 import { TeamModeConfigSchema } from "./team-mode"
@@ -60,6 +61,8 @@ export const OhMyOpenCodeConfigSchema = z.object({
   hashline_edit: z.boolean().optional(),
   /** Enable anonymous telemetry. Default: enabled when omitted. Set to false to disable. Independent of codegraph.telemetry. */
   telemetry: z.boolean().optional().describe("Enable or disable anonymous telemetry. Default: enabled when omitted. Set to false to disable. Independent of codegraph.telemetry."),
+  /** OpenTelemetry distributed tracing config. Disabled (opt-in) by default; see OMO_OTEL_ENABLED. */
+  otel: OtelConfigSchema.optional(),
   /** Enable model fallback on API errors (default: false). Set to true to enable automatic model switching when model errors occur. */
   model_fallback: z.boolean().optional(),
   agents: AgentOverridesSchema.optional(),

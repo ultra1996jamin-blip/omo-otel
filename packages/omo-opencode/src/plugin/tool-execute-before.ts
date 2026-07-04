@@ -12,6 +12,7 @@ import { readState, writeState } from "../hooks/ralph-loop/storage"
 
 import type { CreatedHooks } from "../create-hooks"
 import type { BackgroundManager } from "../features/background-agent"
+import type { ToolSpanTracker } from "./tool-span-tracker"
 
 const BACKGROUND_WAIT_BLOCK_MESSAGE = [
   "Background task wait is already managed by the plugin.",
@@ -43,11 +44,12 @@ export function createToolExecuteBeforeHandler(args: {
   ctx: PluginContext
   hooks: CreatedHooks
   backgroundManager?: Pick<BackgroundManager, "hasActiveChildTasks" | "hasPendingParentWake">
+  toolSpanTracker?: ToolSpanTracker
 }): (
   input: { tool: string; sessionID: string; callID: string },
   output: { args: Record<string, unknown> },
 ) => Promise<void> {
-  const { ctx, hooks, backgroundManager } = args
+  const { ctx, hooks, backgroundManager, toolSpanTracker } = args
 
   function buildUltraworkOracleVerificationPrompt(prompt: string, originalTask: string, verificationAttemptId: string): string {
     const verificationPrompt = [
@@ -82,6 +84,13 @@ export function createToolExecuteBeforeHandler(args: {
       })
       input.tool = stripped
     }
+
+    toolSpanTracker?.start({
+      tool: input.tool,
+      sessionID: input.sessionID,
+      callID: input.callID,
+      args: output.args,
+    })
 
     if (input.tool.toLowerCase() === "bash" && typeof output.args.command === "string") {
       if (output.args.command.includes("\x00")) {

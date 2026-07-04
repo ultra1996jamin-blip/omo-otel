@@ -4,6 +4,7 @@ import type { CreatedHooks } from "../create-hooks"
 import { log as defaultLog } from "../shared/logger"
 import { stripInvisibleAgentCharacters } from "../shared/agent-display-names"
 import type { PluginContext } from "./types"
+import type { ToolSpanTracker } from "./tool-span-tracker"
 
 const VERIFICATION_ATTEMPT_PATTERN = /<ulw_verification_attempt_id>(.*?)<\/ulw_verification_attempt_id>/i
 
@@ -69,11 +70,12 @@ export function createToolExecuteAfterHandler(args: {
   ctx: PluginContext
   hooks: CreatedHooks
   log?: typeof defaultLog
+  toolSpanTracker?: ToolSpanTracker
 }): (
   input: ToolExecuteAfterInput,
   output: ToolExecuteAfterOutput | undefined,
 ) => Promise<void> {
-  const { ctx, hooks } = args
+  const { ctx, hooks, toolSpanTracker } = args
   const log = args.log ?? defaultLog
 
   // OpenCode injects tool call ids into execute() context and after-hook input via undocumented runtime fields.
@@ -83,9 +85,22 @@ export function createToolExecuteAfterHandler(args: {
     input: ToolExecuteAfterInput,
     output: ToolExecuteAfterOutput | undefined,
   ): Promise<void> => {
-    if (!output) return
+    const spanIdentity = {
+      tool: input.tool,
+      sessionID: input.sessionID,
+      callID: input.callID ?? input.callId ?? input.call_id ?? "",
+    }
 
-    appendCodegraphInitGuidance(input, output, getPluginDirectory(ctx))
+    if (!output) {
+      toolSpanTracker?.end(spanIdentity, new Error("tool.execute.after called without output"))
+      return
+    }
+
+    try {
+      appendCodegraphInitGuidance(input, output, getPluginDirectory(ctx))
+    } finally {
+      toolSpanTracker?.end(spanIdentity)
+    }
 
     const hookInput = {
       tool: input.tool,

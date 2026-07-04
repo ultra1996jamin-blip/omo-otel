@@ -95,6 +95,38 @@
       "description": "Enable or disable anonymous telemetry. Default: enabled when omitted. Set to false to disable. Independent of codegraph.telemetry.",
       "type": "boolean"
     },
+    "otel": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "exporter_type": {
+          "type": "string",
+          "enum": [
+            "otlp",
+            "jaeger",
+            "file",
+            "console"
+          ]
+        },
+        "exporters": {
+          "type": "object",
+          "properties": {
+            "otlp": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "sampling_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "model_fallback": {
       "type": "boolean"
     },

@@ -1,5 +1,6 @@
 import type { Prompt, Resource, Tool } from "@modelcontextprotocol/sdk/types.js"
 import type { ClaudeCodeMcpServer } from "@oh-my-opencode/claude-code-compat-core/claude-code-mcp-loader/types"
+import { withSpan } from "@oh-my-opencode/otel-core"
 import { McpOAuthProvider } from "../mcp-oauth/provider"
 import { disconnectAll, disconnectSession, forceReconnect } from "./cleanup"
 import { getOrCreateClient, getOrCreateClientWithRetryImpl } from "./connection"
@@ -23,6 +24,14 @@ export function buildSkillMcpClientKey(info: SkillMcpClientInfo, options?: Skill
   }
 
   return `${baseKey}::cdp=${options.cdpUrl}`
+}
+
+function byteLength(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? "", "utf8")
+  } catch {
+    return 0
+  }
 }
 
 function withInjectedCdpEndpoint(
@@ -110,17 +119,42 @@ export class SkillMcpManager {
     args: Record<string, unknown>,
     options?: SkillMcpClientOptions
   ): Promise<unknown> {
-    return await this.withOperationRetry(info, context.config, options, async (client) => {
-      const result = await client.callTool({ name, arguments: args })
-      return result.content
-    })
+    return await withSpan(
+      `mcp.tool.invoke.${info.serverName}`,
+      {
+        "mcp.server_name": info.serverName,
+        "mcp.operation": "call_tool",
+        "mcp.tool_name": name,
+        "mcp.input_bytes": byteLength(args),
+      },
+      async (span) => {
+        const result = await this.withOperationRetry(info, context.config, options, async (client) => {
+          const toolResult = await client.callTool({ name, arguments: args })
+          return toolResult.content
+        })
+        span.setAttribute("mcp.output_bytes", byteLength(result))
+        return result
+      },
+    )
   }
 
   async readResource(info: SkillMcpClientInfo, context: SkillMcpServerContext, uri: string, options?: SkillMcpClientOptions): Promise<unknown> {
-    return await this.withOperationRetry(info, context.config, options, async (client) => {
-      const result = await client.readResource({ uri })
-      return result.contents
-    })
+    return await withSpan(
+      `mcp.tool.invoke.${info.serverName}`,
+      {
+        "mcp.server_name": info.serverName,
+        "mcp.operation": "read_resource",
+        "mcp.tool_name": uri,
+      },
+      async (span) => {
+        const result = await this.withOperationRetry(info, context.config, options, async (client) => {
+          const resourceResult = await client.readResource({ uri })
+          return resourceResult.contents
+        })
+        span.setAttribute("mcp.output_bytes", byteLength(result))
+        return result
+      },
+    )
   }
 
   async getPrompt(
@@ -130,10 +164,23 @@ export class SkillMcpManager {
     args: Record<string, string>,
     options?: SkillMcpClientOptions
   ): Promise<unknown> {
-    return await this.withOperationRetry(info, context.config, options, async (client) => {
-      const result = await client.getPrompt({ name, arguments: args })
-      return result.messages
-    })
+    return await withSpan(
+      `mcp.tool.invoke.${info.serverName}`,
+      {
+        "mcp.server_name": info.serverName,
+        "mcp.operation": "get_prompt",
+        "mcp.tool_name": name,
+        "mcp.input_bytes": byteLength(args),
+      },
+      async (span) => {
+        const result = await this.withOperationRetry(info, context.config, options, async (client) => {
+          const promptResult = await client.getPrompt({ name, arguments: args })
+          return promptResult.messages
+        })
+        span.setAttribute("mcp.output_bytes", byteLength(result))
+        return result
+      },
+    )
   }
 
   private async withOperationRetry<T>(

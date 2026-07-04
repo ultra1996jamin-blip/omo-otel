@@ -31,6 +31,7 @@ import { log } from "../shared/logger"
 import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
 import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migration"
 import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
+import { initializePluginOtel } from "../shared/otel"
 import { recordPluginTelemetry } from "../shared/posthog"
 import {
   initLiveServerRoute,
@@ -61,6 +62,7 @@ export type PluginModuleDeps = {
   warmLiveServerProbe: typeof warmLiveServerProbe
   loadPluginConfig: typeof loadPluginConfig
   recordPluginTelemetry: typeof recordPluginTelemetry
+  initializePluginOtel: typeof initializePluginOtel
   initI18n: typeof initI18n
   initializeOpenClaw: typeof initializeOpenClaw
   isTmuxIntegrationEnabled: typeof isTmuxIntegrationEnabled
@@ -92,6 +94,7 @@ const defaultPluginModuleDeps: PluginModuleDeps = {
   warmLiveServerProbe,
   loadPluginConfig,
   recordPluginTelemetry,
+  initializePluginOtel,
   initI18n,
   initializeOpenClaw,
   isTmuxIntegrationEnabled,
@@ -135,6 +138,13 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       deps.recordPluginTelemetry({ configEnabled: pluginConfig.telemetry })
     } catch (error) {
       deps.log("[posthog] plugin telemetry failed", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    try {
+      deps.initializePluginOtel({ config: pluginConfig.otel })
+    } catch (error) {
+      deps.log("[otel] plugin otel init failed", {
         error: error instanceof Error ? error.message : String(error),
       })
     }
