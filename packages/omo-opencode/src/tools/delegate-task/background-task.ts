@@ -1,6 +1,15 @@
+import {
+  GEN_AI_AGENT_NAME,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_SYSTEM,
+  GEN_AI_SYSTEM_ATTR,
+  sessionSpanContext,
+  startDetachedSpan,
+} from "@oh-my-opencode/otel-core"
 import type { DelegateTaskArgs, ToolContextWithMetadata, DelegatedModelConfig } from "./types"
 import type { ExecutorContext, ParentContext } from "./executor-types"
 import type { FallbackEntry } from "../../shared/model-requirements"
+import { backgroundTaskSpanRegistry } from "../../shared/background-task-span-registry"
 import { getTimingConfig } from "./timing"
 import { buildTaskPrompt } from "./prompt-builder"
 import { publishToolMetadata } from "../../features/tool-metadata-store"
@@ -136,6 +145,23 @@ export async function executeBackgroundTask(
         : undefined,
     })
 
+    // Span is ended in BackgroundManager.notifyParentSession() — the single
+    // choke point every terminal task state (completed/error/cancelled/
+    // interrupt) already funnels through — since this function returns long
+    // before the background task actually finishes.
+    const agentSpan = startDetachedSpan(
+      `agent.execute.${normalizedAgent}`,
+      {
+        [GEN_AI_OPERATION_NAME]: "agent_delegation",
+        [GEN_AI_SYSTEM_ATTR]: GEN_AI_SYSTEM,
+        [GEN_AI_AGENT_NAME]: normalizedAgent,
+        "agent.task_id": task.id,
+        "agent.task_type": "background",
+      },
+      sessionSpanContext.getContext(parentContext.sessionID),
+    )
+    backgroundTaskSpanRegistry.set(task.id, agentSpan)
+
     // OpenCode TUI's `Task` tool UI calculates toolcalls by looking up
     // `props.metadata.sessionId` and then counting tool parts in that session.
     // BackgroundManager.launch() returns immediately (pending) before the session exists,
@@ -176,6 +202,9 @@ export async function executeBackgroundTask(
     }
 
     if (sessionId) {
+      // Tool calls the background sub-agent makes in its own session should
+      // nest under this agent span rather than starting a new trace.
+      sessionSpanContext.bindRoot(sessionId, agentSpan)
       registerBackgroundSessionContext({
         sessionId,
         fallbackChain,

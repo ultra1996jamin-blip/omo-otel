@@ -1,4 +1,4 @@
-import { DelegateSpanRegistry, endSpanSafely, startDetachedSpan } from "@oh-my-opencode/otel-core"
+import { DelegateSpanRegistry, endSpanSafely, sessionSpanContext, startDetachedSpan } from "@oh-my-opencode/otel-core"
 import { log } from "../shared/logger"
 
 export type ToolSpanTracker = ReturnType<typeof createToolSpanTracker>
@@ -28,10 +28,17 @@ export function createToolSpanTracker() {
     start(input: ToolSpanIdentity & { args?: Record<string, unknown> }): void {
       try {
         const key = spanKey(input)
-        const span = startDetachedSpan(`tool.execute.${input.tool}`, {
-          "tool.name": input.tool,
-          "tool.input.summary": summarizeArgs(input.args),
-        })
+        const parentContext = sessionSpanContext.getContext(input.sessionID)
+        // OMO calls this mechanism a "hook" (tool.execute.before/after), not
+        // a "tool" — the span name/attributes follow that vocabulary.
+        const span = startDetachedSpan(
+          `hook.execute.${input.tool}`,
+          {
+            "hook.name": input.tool,
+            "hook.input.summary": summarizeArgs(input.args),
+          },
+          parentContext,
+        )
         registry.set(key, span)
         startedAtMs.set(key, Date.now())
       } catch (error) {
@@ -49,8 +56,8 @@ export function createToolSpanTracker() {
         endSpanSafely(
           span,
           {
-            "tool.error": error !== undefined,
-            ...(executionMs !== undefined ? { "tool.execution_ms": executionMs } : {}),
+            "hook.error": error !== undefined,
+            ...(executionMs !== undefined ? { "hook.execution_ms": executionMs } : {}),
           },
           error,
         )

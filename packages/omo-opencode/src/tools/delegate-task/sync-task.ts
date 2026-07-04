@@ -3,6 +3,7 @@ import {
   GEN_AI_OPERATION_NAME,
   GEN_AI_SYSTEM,
   GEN_AI_SYSTEM_ATTR,
+  sessionSpanContext,
   withSpan,
 } from "@oh-my-opencode/otel-core"
 import { handedBackSyncSessions } from "../../features/claude-code-session-state"
@@ -31,6 +32,8 @@ export async function executeSyncTask(
   fallbackChain?: FallbackEntry[],
   deps: SyncTaskDeps = syncTaskDeps
 ): Promise<string> {
+  const otelParentContext = sessionSpanContext.getContext(parentContext.sessionID)
+
   return withSpan(
     `agent.execute.${agentToUse}`,
     {
@@ -69,6 +72,10 @@ export async function executeSyncTask(
       const sessionID = createSessionResult.sessionID
       spawnReservation?.commit()
       syncSessionID = sessionID
+      // Tool calls the sub-agent makes in its own session (a different
+      // sessionID from the parent) should nest under this agent span rather
+      // than starting a new trace — see SessionSpanContext.
+      sessionSpanContext.bindRoot(sessionID, span)
 
       const registerSyncSession = async (newSessionID: string): Promise<void> => {
         syncSessionID = newSessionID
@@ -171,6 +178,7 @@ export async function executeSyncTask(
       })
     } finally {
       if (syncSessionID) {
+        sessionSpanContext.release(syncSessionID)
         cleanupSyncSessionSideEffects(syncSessionID, executorCtx)
         handedBackSyncSessions.add(syncSessionID)
 
@@ -190,5 +198,7 @@ export async function executeSyncTask(
       }
     }
     },
+    undefined,
+    otelParentContext,
   )
 }

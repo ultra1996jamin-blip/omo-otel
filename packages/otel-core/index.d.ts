@@ -1,4 +1,4 @@
-import type { Attributes, Span, Tracer } from "@opentelemetry/api";
+import type { Attributes, Context, Span, Tracer } from "@opentelemetry/api";
 
 export type OtelExporterKind = "otlp" | "jaeger" | "file" | "console";
 
@@ -64,8 +64,9 @@ export declare function withSpan<T>(
   attributes: Attributes,
   fn: (span: Span) => Promise<T> | T,
   diagnostics?: OtelDiagnostics,
+  parentContext?: Context,
 ): Promise<T>;
-export declare function startDetachedSpan(name: string, attributes: Attributes): Span;
+export declare function startDetachedSpan(name: string, attributes: Attributes, parentContext?: Context): Span;
 export declare function endSpanSafely(span: Span | undefined, attributes?: Attributes, error?: unknown): void;
 
 export declare class DelegateSpanRegistry {
@@ -74,6 +75,24 @@ export declare class DelegateSpanRegistry {
   delete(taskId: string): void;
   size(): number;
 }
+
+export declare const DEFAULT_SESSION_IDLE_MS: number;
+
+export declare class SessionSpanContext {
+  getContext(sessionID: string, idleMs?: number, attributes?: Attributes, startTimeMs?: number): Context;
+  getOrCreateNamedRootContext(
+    sessionID: string,
+    rootName: string,
+    idleMs?: number,
+    attributes?: Attributes,
+    startTimeMs?: number,
+  ): { context: Context; created: boolean };
+  bindRoot(sessionID: string, span: Span, idleMs?: number): void;
+  release(sessionID: string): void;
+  __resetForTesting(): void;
+}
+
+export declare const sessionSpanContext: SessionSpanContext;
 
 export type InitializeOtelInput = ResolveOtelConfigInput & {
   readonly diagnostics?: OtelDiagnostics;

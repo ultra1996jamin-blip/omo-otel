@@ -1,7 +1,16 @@
 import type { CallOmoAgentArgs } from "./types"
 import type { BackgroundManager } from "../../features/background-agent"
 import type { PluginInput } from "@opencode-ai/plugin"
+import {
+  GEN_AI_AGENT_NAME,
+  GEN_AI_OPERATION_NAME,
+  GEN_AI_SYSTEM,
+  GEN_AI_SYSTEM_ATTR,
+  sessionSpanContext,
+  startDetachedSpan,
+} from "@oh-my-opencode/otel-core"
 import { log } from "../../shared"
+import { backgroundTaskSpanRegistry } from "../../shared/background-task-span-registry"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
 import type { FallbackEntry } from "../../shared/model-requirements"
 import { resolveMessageContext } from "../../features/hook-message-injector"
@@ -46,10 +55,11 @@ export async function executeBackground(
       resolvedParentAgent: parentAgent,
     })
 
+    const normalizedAgent = getAgentDisplayName(stripAgentListSortPrefix(sanitizeSubagentType(args.subagent_type)))
     const task = await manager.launch({
       description: args.description,
       prompt: args.prompt,
-      agent: getAgentDisplayName(stripAgentListSortPrefix(sanitizeSubagentType(args.subagent_type))),
+      agent: normalizedAgent,
       parentSessionId: toolContext.sessionID,
       parentMessageId: toolContext.messageID,
       parentAgent,
@@ -57,6 +67,22 @@ export async function executeBackground(
       model,
       fallbackChain,
     })
+
+    // Span is ended in BackgroundManager.notifyParentSession() — the single
+    // choke point every terminal task state funnels through — since this
+    // function returns long before the background task actually finishes.
+    const agentSpan = startDetachedSpan(
+      `agent.execute.${normalizedAgent}`,
+      {
+        [GEN_AI_OPERATION_NAME]: "agent_delegation",
+        [GEN_AI_SYSTEM_ATTR]: GEN_AI_SYSTEM,
+        [GEN_AI_AGENT_NAME]: normalizedAgent,
+        "agent.task_id": task.id,
+        "agent.task_type": "background",
+      },
+      sessionSpanContext.getContext(toolContext.sessionID),
+    )
+    backgroundTaskSpanRegistry.set(task.id, agentSpan)
 
     const WAIT_FOR_SESSION_INTERVAL_MS = 50
     const WAIT_FOR_SESSION_TIMEOUT_MS = 30000
@@ -75,6 +101,12 @@ export async function executeBackground(
         break
       }
       await new Promise(resolve => setTimeout(resolve, WAIT_FOR_SESSION_INTERVAL_MS))
+    }
+
+    if (sessionId) {
+      // Tool calls the background sub-agent makes in its own session should
+      // nest under this agent span rather than starting a new trace.
+      sessionSpanContext.bindRoot(sessionId, agentSpan)
     }
 
     await toolContext.metadata?.({

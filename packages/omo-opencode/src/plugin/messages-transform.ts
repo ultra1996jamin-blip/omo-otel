@@ -4,6 +4,7 @@ import type { Message, Part } from "@opencode-ai/sdk"
 import { log } from "../shared/logger"
 import { normalizeModelID } from "../shared/model-normalization"
 import type { CreatedHooks } from "../create-hooks"
+import { captureOutgoingPrompt } from "./gen-ai-completion-span"
 
 const ASSISTANT_PREFILL_RECOVERY_TEXT = "[internal] Continue from the previous assistant state."
 const ASSISTANT_PREFILL_UNSUPPORTED_PROVIDERS = new Set([
@@ -238,6 +239,11 @@ export function createMessagesTransformHandler(args: {
   hooks: MessagesTransformHooks
 }): (input: Record<string, never>, output: MessagesTransformOutput) => Promise<void> {
   return async (input, output): Promise<void> => {
+    // This hook fires with the outgoing payload on every LLM request — the
+    // exact moment "genai is called" — so the prompt is captured here
+    // directly rather than reconstructed from the DB afterwards.
+    captureOutgoingPrompt(output.messages)
+
     for (const hook of MESSAGES_TRANSFORM_HOOKS) {
       await runMessagesTransformHookSafely(
         hook.name,

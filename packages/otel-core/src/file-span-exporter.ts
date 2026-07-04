@@ -14,6 +14,11 @@ function serializeSpan(span: ReadableSpan): Record<string, unknown> {
     startTimeUnixMicro: hrTimeToMicroseconds(span.startTime),
     endTimeUnixMicro: hrTimeToMicroseconds(span.endTime),
     attributes: span.attributes,
+    events: span.events.map((event) => ({
+      name: event.name,
+      timeUnixMicro: hrTimeToMicroseconds(event.time),
+      attributes: event.attributes,
+    })),
     status: span.status,
   }
 }

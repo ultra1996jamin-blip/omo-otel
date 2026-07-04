@@ -8,6 +8,7 @@ import { getMainSessionID, subagentSessions, syncSubagentSessions } from "../fea
 import { invalidateContextWindowUsageCache } from "../shared/dynamic-truncator";
 import { resolveSessionEventID } from "../shared/event-session-id";
 import { log } from "../shared/logger";
+import { captureFirstUserPrompt, recordGenAiCompletionSpan } from "./gen-ai-completion-span";
 import { normalizeSessionStatusToIdle } from "./session-status-normalizer";
 import { pruneRecentSyntheticIdles } from "./recent-synthetic-idles";
 import { extractErrorMessage, extractErrorName } from "./event-error-utils";
@@ -184,8 +185,16 @@ export function createEventHandler(args: {
         props,
         noteSessionModel: modelFallbackHandler.setLastKnownModel,
       });
-      if (state.sessionID && ((typeof state.info?.finish === "string" && state.info.finish.length > 0) || state.info?.finish === true)) {
+      const messageFinished =
+        typeof state.info?.finish === "string" ? state.info.finish.length > 0 : state.info?.finish === true;
+      if (state.sessionID && messageFinished) {
         invalidateContextWindowUsageCache(pluginContext as PluginInput, state.sessionID);
+      }
+      if (state.sessionID && state.role === "assistant" && messageFinished) {
+        void recordGenAiCompletionSpan(state.info ?? {}, state.sessionID, pluginContext.client);
+      }
+      if (state.sessionID && state.role === "user") {
+        void captureFirstUserPrompt(state.info ?? {}, state.sessionID, pluginContext.client);
       }
       if (state.sessionID && state.role === "assistant") {
         try {

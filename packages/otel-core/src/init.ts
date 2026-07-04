@@ -68,7 +68,13 @@ export function initializeOtel(input: InitializeOtelInput = {}): OtelHandle {
       spanProcessors: [new BatchSpanProcessor(exporter)],
     })
 
+    // @opentelemetry/api's global tracer provider registers only once per
+    // process — a second `setGlobalTracerProvider` call silently no-ops. That
+    // breaks re-initialization (config reload, or multiple tests in one
+    // process), so force the update on the proxy the API already returned.
     trace.setGlobalTracerProvider(provider)
+    const proxyProvider = trace.getTracerProvider() as unknown as { setDelegate?: (delegate: unknown) => void }
+    proxyProvider.setDelegate?.(provider)
     const tracer = trace.getTracer(config.serviceName, config.serviceVersion)
     activeTracer = tracer
 

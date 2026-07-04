@@ -1,5 +1,7 @@
 import { join } from "node:path"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { endSpanSafely, sessionSpanContext } from "@oh-my-opencode/otel-core"
+import { backgroundTaskSpanRegistry } from "../../shared/background-task-span-registry"
 import type { BackgroundTaskConfig, TmuxConfig } from "../../config/schema"
 import type { ModelFallbackControllerAccessor } from "../../hooks/model-fallback"
 import {
@@ -2604,6 +2606,23 @@ The task was re-queued on a fallback model after a retryable failure.
   }
 
   private async notifyParentSession(task: BackgroundTask): Promise<void> {
+    // Every terminal state (completed/error/cancelled/interrupt) funnels
+    // through here exactly once, so this is where the agent.execute span
+    // opened in background-task.ts at launch time gets closed.
+    const agentSpan = backgroundTaskSpanRegistry.get(task.id)
+    if (agentSpan) {
+      const isFailure = task.status === "error" || task.status === "cancelled" || task.status === "interrupt"
+      endSpanSafely(
+        agentSpan,
+        { "agent.task_status": task.status },
+        isFailure ? new Error(task.error ?? `background task ended with status: ${task.status}`) : undefined,
+      )
+      backgroundTaskSpanRegistry.delete(task.id)
+    }
+    if (task.sessionId) {
+      sessionSpanContext.release(task.sessionId)
+    }
+
     const duration = formatDuration(task.startedAt ?? new Date(), task.completedAt)
 
     log("[background-agent] notifyParentSession called for task:", task.id)

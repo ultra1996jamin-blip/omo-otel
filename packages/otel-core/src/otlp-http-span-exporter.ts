@@ -28,6 +28,14 @@ function encodeAttributes(attributes: Record<string, unknown> | undefined): { ke
     .map(([key, value]) => ({ key, value: encodeAttributeValue(value) }))
 }
 
+function encodeEvent(event: ReadableSpan["events"][number]): Record<string, unknown> {
+  return {
+    name: event.name,
+    timeUnixNano: String(hrTimeToNanoseconds(event.time)),
+    attributes: encodeAttributes(event.attributes as Record<string, unknown> | undefined),
+  }
+}
+
 function encodeSpan(span: ReadableSpan): Record<string, unknown> {
   const context = span.spanContext()
   return {
@@ -39,6 +47,7 @@ function encodeSpan(span: ReadableSpan): Record<string, unknown> {
     startTimeUnixNano: String(hrTimeToNanoseconds(span.startTime)),
     endTimeUnixNano: String(hrTimeToNanoseconds(span.endTime)),
     attributes: encodeAttributes(span.attributes),
+    events: span.events.map(encodeEvent),
     status: { code: span.status.code },
   }
 }

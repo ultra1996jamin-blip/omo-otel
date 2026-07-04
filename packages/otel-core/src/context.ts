@@ -1,4 +1,4 @@
-import { context, trace, SpanStatusCode, type Attributes, type Span, type Tracer } from "@opentelemetry/api"
+import { context, trace, SpanStatusCode, type Attributes, type Context, type Span, type Tracer } from "@opentelemetry/api"
 import { getActiveTracer } from "./init"
 import type { OtelDiagnostics } from "./types"
 
@@ -14,18 +14,24 @@ export function resolveTracer(): Tracer {
  * Starts a span, runs `fn` inside its context, and always ends the span —
  * even when `fn` throws or the tracer is a no-op. Span bookkeeping failures
  * are swallowed via `diagnostics` so telemetry never breaks agent execution.
+ *
+ * `parentContext` links this span under an explicit parent (e.g. a session
+ * root from SessionSpanContext) instead of whatever's ambiently active —
+ * separate tool-execute-before/after hook invocations don't share a call
+ * stack, so ambient context propagation alone can't connect them.
  */
 export async function withSpan<T>(
   name: string,
   attributes: Attributes,
   fn: (span: Span) => Promise<T> | T,
   diagnostics?: OtelDiagnostics,
+  parentContext?: Context,
 ): Promise<T> {
   const tracer = resolveTracer()
-  const span = tracer.startSpan(name, { attributes })
+  const span = tracer.startSpan(name, { attributes }, parentContext ?? context.active())
 
   try {
-    return await context.with(trace.setSpan(context.active(), span), () => fn(span))
+    return await context.with(trace.setSpan(parentContext ?? context.active(), span), () => fn(span))
   } catch (error) {
     try {
       span.recordException(error instanceof Error ? error : String(error))
@@ -48,8 +54,8 @@ export async function withSpan<T>(
  * launch whose completion is observed by a different hook later). Callers
  * must end the span themselves — see DelegateSpanRegistry for the handoff.
  */
-export function startDetachedSpan(name: string, attributes: Attributes): Span {
-  return resolveTracer().startSpan(name, { attributes })
+export function startDetachedSpan(name: string, attributes: Attributes, parentContext?: Context): Span {
+  return resolveTracer().startSpan(name, { attributes }, parentContext ?? context.active())
 }
 
 export function endSpanSafely(span: Span | undefined, attributes?: Attributes, error?: unknown): void {
