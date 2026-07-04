@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel, sessionSpanContext } from "@oh-my-opencode/otel-core"
+import { trace } from "@opentelemetry/api"
 
 import { captureFirstUserPrompt, captureOutgoingPrompt, recordGenAiCompletionSpan } from "./gen-ai-completion-span"
 
@@ -302,6 +303,82 @@ describe("captureFirstUserPrompt", () => {
       const parsed = JSON.parse(promptLine!)
       expect(parsed.parentSpanId).toBeDefined()
       expect(parsed.attributes["gen_ai.prompt"]).toBe("늦게 도착한 프롬프트")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("waits briefly for a sub-agent's root to bind instead of stamping an orphaned standalone root", async () => {
+    // given — reproduces the live bug: bindRoot() for a delegated sub-agent
+    // session always runs synchronously right after its sessionID is known,
+    // but this function's own async message fetch can occasionally resolve
+    // first. Without the retry, this would eagerly stamp a standalone root
+    // (its own new trace) that bindRoot() then silently supersedes moments
+    // later, leaving the stamp as a disconnected single-span trace forever.
+    const dir = mkdtempSync(join(tmpdir(), "delegation-race-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-sub-agent-race"
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_race2", parts: [{ type: "text", text: "Test the explore agent." }] }],
+          get: async () => ({ data: { parentID: "session-orchestrator" } }),
+        },
+      }
+      const agentExecuteSpan = trace.getTracer("test").startSpan("agent.execute.explore")
+
+      // when — bindRoot lands shortly after this call starts, within the retry window
+      const capturePromise = captureFirstUserPrompt({ id: "user_race2" }, sessionID, client)
+      setTimeout(() => sessionSpanContext.bindRoot(sessionID, agentExecuteSpan), 30)
+      await capturePromise
+      agentExecuteSpan.end()
+      await handle.shutdown()
+
+      // then — agent.prompt nests under the agent.execute span; no
+      // separately-traced orphaned "user.prompt" root was ever stamped
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const lines = contents.split("\n").filter((line) => line.trim().length > 0)
+      const spans = lines.map((line) => JSON.parse(line))
+      expect(spans.find((s) => s.name === "user.prompt")).toBeUndefined()
+      const promptSpan = spans.find((s) => s.name === "agent.prompt")
+      expect(promptSpan).toBeDefined()
+      expect(promptSpan.parentSpanId).toBe(agentExecuteSpan.spanContext().spanId)
+      expect(promptSpan.traceId).toBe(agentExecuteSpan.spanContext().traceId)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("falls back to stamping its own root if a sub-agent's bind never arrives within the retry window", async () => {
+    // given — the retry is a bounded grace period, not a guarantee; if
+    // bindRoot() genuinely never comes, this must still record something
+    // rather than silently dropping the prompt.
+    const dir = mkdtempSync(join(tmpdir(), "delegation-race-timeout-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_race3", parts: [{ type: "text", text: "늦어도 결국 기록됨" }] }],
+          get: async () => ({ data: { parentID: "session-orchestrator" } }),
+        },
+      }
+
+      // when — bindRoot never arrives
+      await captureFirstUserPrompt({ id: "user_race3" }, "session-sub-agent-timeout", client)
+      await handle.shutdown()
+
+      // then — still recorded, as the session's own root
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const lines = contents.split("\n").filter((line) => line.trim().length > 0)
+      expect(lines.length).toBe(1)
+      const parsed = JSON.parse(lines[0]!)
+      expect(parsed.name).toBe("user.prompt")
+      expect(parsed.parentSpanId).toBeUndefined()
+      expect(parsed.attributes["gen_ai.prompt"]).toBe("늦어도 결국 기록됨")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

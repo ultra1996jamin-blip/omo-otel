@@ -124,6 +124,18 @@ export class SessionSpanContext {
     })
   }
 
+  /** Reports whether `sessionID` already has a bound/stamped root, without
+   * creating one — a pure peek. Used to detect a delegation race: a
+   * sub-agent session's root is normally bound (via bindRoot) moments after
+   * its first message lands, but if a caller reaches getContext() first, it
+   * would eagerly stamp a standalone root that the later bindRoot() call
+   * then silently supersedes, leaving the stamp as an orphaned single-span
+   * trace. Callers who know they're on a sub-agent session can use this to
+   * wait briefly for the real bind instead. */
+  hasRoot(sessionID: string): boolean {
+    return this.roots.has(sessionID)
+  }
+
   /** Removes the mapping for `sessionID`. Never ends any span — there's
    * nothing to end; only a SpanContext is stored. */
   release(sessionID: string): void {

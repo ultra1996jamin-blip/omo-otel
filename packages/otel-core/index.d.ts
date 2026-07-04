@@ -88,6 +88,7 @@ export declare class SessionSpanContext {
     startTimeMs?: number,
   ): { context: Context; created: boolean };
   bindRoot(sessionID: string, span: Span, idleMs?: number): void;
+  hasRoot(sessionID: string): boolean;
   release(sessionID: string): void;
   __resetForTesting(): void;
 }

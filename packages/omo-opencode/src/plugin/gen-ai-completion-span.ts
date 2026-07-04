@@ -53,6 +53,24 @@ type AssistantMessageInfo = {
 export type OpencodeMessagesClient = {
   readonly session: {
     readonly messages: (input: { readonly path: { readonly id: string } }) => Promise<unknown>
+    readonly get?: (input: { readonly path: { readonly id: string } }) => Promise<unknown>
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+const ROOT_RACE_RETRY_DELAYS_MS = [20, 40, 60]
+
+async function isDelegatedSubSession(client: OpencodeMessagesClient, sessionID: string): Promise<boolean> {
+  if (typeof client.session.get !== "function") return false
+  try {
+    const raw = await client.session.get({ path: { id: sessionID } })
+    const data = normalizeSDKResponse<{ readonly parentID?: unknown }>(raw, {})
+    return typeof data?.parentID === "string" && data.parentID.length > 0
+  } catch {
+    return false
   }
 }
 
@@ -276,14 +294,23 @@ type UserMessageInfo = {
  * If some other span already created the root first (`created` is false),
  * this attaches a child instead — that stamp has already ended and can't be
  * renamed or amended. In practice this fallback path is what fires for a
- * DELEGATED sub-agent session: its root was already bound to the dispatching
- * `agent.execute.*` span (see delegate-task/call-omo-agent) before this
- * async fetch resolves, every single time. The text a sub-agent received is
- * NOT something the human typed (it's the orchestrator's own delegation
- * prompt, e.g. "This is a test invocation. Respond with...") — naming this
- * fallback span `agent.prompt` instead of `user.prompt` keeps that visually
- * distinct in Jaeger, instead of every sub-agent hop looking like a second
- * human message.
+ * DELEGATED sub-agent session: its root is bound to the dispatching
+ * `agent.execute.*` span (see delegate-task/call-omo-agent). The text a
+ * sub-agent received is NOT something the human typed (it's the
+ * orchestrator's own delegation prompt, e.g. "This is a test invocation.
+ * Respond with...") — naming this fallback span `agent.prompt` instead of
+ * `user.prompt` keeps that visually distinct in Jaeger.
+ *
+ * bindRoot() for a sub-agent session always runs synchronously right after
+ * its sessionID is known, strictly before the delegating tool sends that
+ * session's first prompt — but this function's own async message fetch can
+ * still occasionally resolve first (observed live: a handful of sub-agent
+ * test-invocation prompts each landed in their own orphaned single-span
+ * trace instead of nesting under agent.execute.*). When the session turns
+ * out to have a parentID (i.e. it's a sub-agent session, not top-level) and
+ * no root is bound yet, briefly retry before deciding — long enough for the
+ * synchronous bindRoot() call to land, without meaningfully delaying the
+ * common (already-bound) case.
  */
 export async function captureFirstUserPrompt(
   info: UserMessageInfo,
@@ -303,6 +330,13 @@ export async function captureFirstUserPrompt(
     const userMessage = messages.find((m) => messageId(m) === id)
     const prompt = extractText(userMessage)
     if (!prompt) return
+
+    if (!sessionSpanContext.hasRoot(sessionID) && (await isDelegatedSubSession(client, sessionID))) {
+      for (const delayMs of ROOT_RACE_RETRY_DELAYS_MS) {
+        if (sessionSpanContext.hasRoot(sessionID)) break
+        await sleep(delayMs)
+      }
+    }
 
     const createdMs = num(info.time?.created)
     const attributes: Attributes = { "gen_ai.prompt": prompt, "session.id": sessionID }
