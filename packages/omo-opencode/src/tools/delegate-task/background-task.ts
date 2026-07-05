@@ -9,6 +9,7 @@ import {
 import type { DelegateTaskArgs, ToolContextWithMetadata, DelegatedModelConfig } from "./types"
 import type { ExecutorContext, ParentContext } from "./executor-types"
 import type { FallbackEntry } from "../../shared/model-requirements"
+import { log } from "../../shared/logger"
 import { backgroundTaskSpanRegistry } from "../../shared/background-task-span-registry"
 import { getTimingConfig } from "./timing"
 import { buildTaskPrompt } from "./prompt-builder"
@@ -167,6 +168,7 @@ export async function executeBackgroundTask(
     // BackgroundManager.launch() returns immediately (pending) before the session exists,
     // so we must wait briefly for the session to be created to set metadata correctly.
     const timing = getTimingConfig()
+    const bindWaitStartedAt = Date.now()
     let sessionId = await waitForBackgroundSessionStart({
       taskId: task.id,
       initialSessionId: task.sessionId,
@@ -205,11 +207,24 @@ export async function executeBackgroundTask(
       // Tool calls the background sub-agent makes in its own session should
       // nest under this agent span rather than starting a new trace.
       sessionSpanContext.bindRoot(sessionId, agentSpan)
+      // @debug-temp: pin down a live orphan-trace repro — remove once root-caused.
+      log("[otel][debug] bindRoot() called for background delegation", {
+        sessionId,
+        taskId: task.id,
+        waitedMs: Date.now() - bindWaitStartedAt,
+      })
       registerBackgroundSessionContext({
         sessionId,
         fallbackChain,
         category: args.category,
         modelFallbackControllerAccessor: executorCtx.modelFallbackControllerAccessor,
+      })
+    } else {
+      // @debug-temp: pin down a live orphan-trace repro — remove once root-caused.
+      log("[otel][debug] bindRoot() SKIPPED — no sessionId resolved for background delegation", {
+        taskId: task.id,
+        waitedMs: Date.now() - bindWaitStartedAt,
+        updatedTaskStatus: updatedTask?.status,
       })
     }
 

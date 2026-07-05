@@ -149,6 +149,7 @@ export async function executeSyncTask(
           fallbackChain,
           deps,
           sessionID,
+          span,
           spawnDepth: spawnContext.childDepth,
           taskId,
           startTime,

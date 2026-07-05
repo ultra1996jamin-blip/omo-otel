@@ -195,4 +195,148 @@ describe("SessionSpanContext", () => {
     expect(after).not.toBe(before)
     registry.__resetForTesting()
   })
+
+  describe("getContextAwaitingPendingBind", () => {
+    test("resolves immediately (no wait) when the session isn't marked pending — the common case", async () => {
+      // given
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+
+      // when — no markPendingBind call at all
+      const start = Date.now()
+      await registry.getContextAwaitingPendingBind("session-not-pending", 5_000)
+      const elapsedMs = Date.now() - start
+
+      // then — effectively instant, not stalled by the (unused) ceiling
+      expect(elapsedMs).toBeLessThan(100)
+      registry.__resetForTesting()
+    })
+
+    test("waits for bindRoot() when the session is marked pending, then returns the bound context", async () => {
+      // given — reproduces the fix: a sub-agent session marked pending while
+      // its delegating tool is still waiting on session start (e.g.
+      // waitForBackgroundSessionStart) must not have hook/gen_ai spans
+      // stamp their own generic root out from under it. Event-driven, not
+      // polled: bindRoot() firing resolves the wait immediately, well before
+      // the (deliberately generous) ceiling would.
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      const sessionID = "session-pending-bind"
+      registry.markPendingBind(sessionID)
+      const agentSpan = trace.getTracer("test").startSpan("agent.execute.explore")
+
+      // when — bindRoot lands well before the ceiling
+      setTimeout(() => registry.bindRoot(sessionID, agentSpan), 30)
+      const start = Date.now()
+      const resolvedContext = await registry.getContextAwaitingPendingBind(sessionID, 5_000)
+      const elapsedMs = Date.now() - start
+
+      // then — got the bound span's context (not a freshly-stamped one),
+      // and resolved right away instead of waiting out the full ceiling
+      expect(trace.getSpanContext(resolvedContext)?.spanId).toBe(agentSpan.spanContext().spanId)
+      expect(elapsedMs).toBeLessThan(500)
+      agentSpan.end()
+      registry.__resetForTesting()
+    })
+
+    test("falls back to stamping a generic root if pending but the bind never arrives within the ceiling", async () => {
+      // given
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      const sessionID = "session-pending-bind-timeout"
+      registry.markPendingBind(sessionID)
+
+      // when — bindRoot never called; ceiling kept short just for this test
+      const resolvedContext = await registry.getContextAwaitingPendingBind(sessionID, 20)
+
+      // then — still gets a usable context (a freshly-stamped generic root)
+      expect(trace.getSpanContext(resolvedContext)?.traceId).toBeDefined()
+      registry.__resetForTesting()
+    })
+
+    test("clearPendingBind cancels the wait — a later getContextAwaitingPendingBind call resolves immediately", async () => {
+      // given
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      const sessionID = "session-marker-toggle"
+      registry.markPendingBind(sessionID)
+
+      // when — cleared before anyone calls getContextAwaitingPendingBind
+      registry.clearPendingBind(sessionID)
+      registry.clearPendingBind(sessionID) // safe even when already cleared
+      expect(() => registry.clearPendingBind("never-marked")).not.toThrow()
+
+      const start = Date.now()
+      await registry.getContextAwaitingPendingBind(sessionID, 5_000)
+      const elapsedMs = Date.now() - start
+
+      // then — no wait, since the marker was cleared before the call
+      expect(elapsedMs).toBeLessThan(100)
+      registry.__resetForTesting()
+    })
+
+    test("bindRoot() itself clears a pending marker as a side effect", async () => {
+      // given
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      const sessionID = "session-bindroot-clears-marker"
+      registry.markPendingBind(sessionID)
+      const agentSpan = trace.getTracer("test").startSpan("agent.execute.explore")
+
+      // when — bindRoot happens (not through the wait loop, just directly)
+      registry.bindRoot(sessionID, agentSpan)
+
+      // then — a later call sees the marker already cleared, so even with a
+      // long ceiling it resolves immediately (root already exists anyway,
+      // but this confirms bindRoot itself does the clearing, not just luck)
+      const start = Date.now()
+      await registry.getContextAwaitingPendingBind(sessionID, 5_000)
+      const elapsedMs = Date.now() - start
+      expect(elapsedMs).toBeLessThan(100)
+      agentSpan.end()
+      registry.__resetForTesting()
+    })
+  })
+
+  describe("waitForBind", () => {
+    test("resolves immediately when a root already exists", async () => {
+      // given
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      registry.getContext("session-already-rooted", 60_000)
+
+      // when
+      const start = Date.now()
+      await registry.waitForBind("session-already-rooted", 5_000)
+      const elapsedMs = Date.now() - start
+
+      // then
+      expect(elapsedMs).toBeLessThan(50)
+      registry.__resetForTesting()
+    })
+
+    test("multiple concurrent waiters for the same session all resolve on a single bindRoot() call", async () => {
+      // given — otel-core is a shared singleton in production, so more than
+      // one caller (e.g. captureFirstUserPrompt AND a hook.execute span)
+      // could legitimately be waiting on the same sessionID at once.
+      enableRealTracer()
+      const registry = new SessionSpanContext()
+      const sessionID = "session-multi-waiter"
+      const agentSpan = trace.getTracer("test").startSpan("agent.execute.explore")
+
+      // when
+      setTimeout(() => registry.bindRoot(sessionID, agentSpan), 20)
+      await Promise.all([
+        registry.waitForBind(sessionID, 5_000),
+        registry.waitForBind(sessionID, 5_000),
+        registry.waitForBind(sessionID, 5_000),
+      ])
+
+      // then — all three resolved (Promise.all wouldn't otherwise settle)
+      // and the session is correctly bound afterward
+      expect(registry.hasRoot(sessionID)).toBe(true)
+      agentSpan.end()
+      registry.__resetForTesting()
+    })
+  })
 })

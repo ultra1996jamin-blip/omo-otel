@@ -25,10 +25,19 @@ export function createToolSpanTracker() {
   const startedAtMs = new Map<string, number>()
 
   return {
-    start(input: ToolSpanIdentity & { args?: Record<string, unknown> }): void {
+    // Async — but always called fire-and-forget (`void tracker.start(...)`)
+    // from tool-execute-before.ts, never awaited, so a rare pending-bind wait
+    // here can't add latency to the actual tool call. Captures the real
+    // start time BEFORE that wait so hook.execution_ms still reflects the
+    // tool's own duration, not this telemetry bookkeeping.
+    async start(input: ToolSpanIdentity & { args?: Record<string, unknown> }): Promise<void> {
+      const key = spanKey(input)
+      startedAtMs.set(key, Date.now())
       try {
-        const key = spanKey(input)
-        const parentContext = sessionSpanContext.getContext(input.sessionID)
+        // Waits out any in-flight bindRoot() for a delegated sub-agent
+        // session before falling back to auto-vivifying a generic root —
+        // see SessionSpanContext.getContextAwaitingPendingBind's doc comment.
+        const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(input.sessionID)
         // OMO calls this mechanism a "hook" (tool.execute.before/after), not
         // a "tool" — the span name/attributes follow that vocabulary.
         const span = startDetachedSpan(
@@ -40,7 +49,6 @@ export function createToolSpanTracker() {
           parentContext,
         )
         registry.set(key, span)
-        startedAtMs.set(key, Date.now())
       } catch (error) {
         log("[otel] failed to start tool span", { tool: input.tool, error })
       }

@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel } from "@oh-my-opencode/otel-core"
 
 import { createToolSpanTracker } from "./tool-span-tracker"
@@ -35,5 +38,43 @@ describe("createToolSpanTracker", () => {
 
     // when / then
     expect(() => tracker.end(identity, new Error("boom"))).not.toThrow()
+  })
+
+  test("start() is async but fire-and-forget in production — awaiting it still registers a real span end() closes with hook attributes", async () => {
+    // given — start() now awaits getContextAwaitingPendingBind (may briefly
+    // wait on a delegated sub-agent's bindRoot), so it's called
+    // fire-and-forget from tool-execute-before.ts. This test awaits it
+    // directly to confirm the underlying span registration still works once
+    // the promise settles — checking exported span content, not just that
+    // nothing throws (which would also pass if end() silently no-oped on a
+    // never-registered span).
+    const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-async-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const tracker = createToolSpanTracker()
+      const identity = { tool: "grep", sessionID: "session-await", callID: "call-await" }
+
+      // when
+      await tracker.start({ ...identity, args: { pattern: "x", path: "y" } })
+      tracker.end(identity)
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const hookSpan = spans.find((s) => s.name === "hook.execute.grep")
+      expect(hookSpan).toBeDefined()
+      expect(hookSpan.attributes["hook.name"]).toBe("grep")
+      expect(hookSpan.attributes["hook.input.summary"]).toBe("path,pattern")
+      expect(hookSpan.attributes["hook.error"]).toBe(false)
+      expect(typeof hookSpan.attributes["hook.execution_ms"]).toBe("number")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

@@ -85,7 +85,10 @@ export function createToolExecuteBeforeHandler(args: {
       input.tool = stripped
     }
 
-    toolSpanTracker?.start({
+    // Fire-and-forget: start() may briefly wait on a delegated sub-agent's
+    // pending bindRoot() (see SessionSpanContext.getContextAwaitingPendingBind)
+    // and must never delay the actual tool call below.
+    void toolSpanTracker?.start({
       tool: input.tool,
       sessionID: input.sessionID,
       callID: input.callID,

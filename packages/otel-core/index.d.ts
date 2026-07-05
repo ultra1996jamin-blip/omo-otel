@@ -89,9 +89,23 @@ export declare class SessionSpanContext {
   ): { context: Context; created: boolean };
   bindRoot(sessionID: string, span: Span, idleMs?: number): void;
   hasRoot(sessionID: string): boolean;
+  markPendingBind(sessionID: string): void;
+  clearPendingBind(sessionID: string): void;
+  waitForBind(sessionID: string, maxWaitMs: number): Promise<void>;
+  getContextAwaitingPendingBind(
+    sessionID: string,
+    maxWaitMs?: number,
+    idleMs?: number,
+    attributes?: Attributes,
+    startTimeMs?: number,
+  ): Promise<Context>;
   release(sessionID: string): void;
   __resetForTesting(): void;
 }
+
+export declare function getPendingBindMaxWaitMs(): number;
+export declare function __setPendingBindMaxWaitForTesting(maxWaitMs: number): void;
+export declare function __resetPendingBindMaxWaitForTesting(): void;
 
 export declare const sessionSpanContext: SessionSpanContext;
 

@@ -1,4 +1,10 @@
-import { resolveTracer, sessionSpanContext } from "@oh-my-opencode/otel-core"
+import {
+  __resetPendingBindMaxWaitForTesting,
+  __setPendingBindMaxWaitForTesting,
+  getPendingBindMaxWaitMs,
+  resolveTracer,
+  sessionSpanContext,
+} from "@oh-my-opencode/otel-core"
 import type { Attributes } from "@opentelemetry/api"
 import { isRealUserTextPart, stripInternalInitiatorMarkers } from "../shared/internal-initiator-marker"
 import { log } from "../shared/logger"
@@ -66,11 +72,44 @@ export type OpencodeMessagesClient = {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Ceiling for the event-driven wait below. Sync delegation's bindRoot() runs
+// synchronously right after session creation (a handful of ms is plenty),
+// but BACKGROUND delegation (delegate-task/background-task.ts,
+// call-omo-agent/background-executor.ts) binds root only after
+// waitForBackgroundSessionStart() reports the session as started — a
+// poll loop at WAIT_FOR_SESSION_INTERVAL_MS=100ms with
+// WAIT_FOR_SESSION_TIMEOUT_MS=60000ms (see tools/delegate-task/timing.ts),
+// and in practice observed to run noticeably longer than that (model
+// fallback retries after a quota error, each restarting its own
+// session-creation wait — on the order of ~2 minutes live). A fixed retry
+// schedule tuned for the common case kept losing that race for slower
+// background dispatches. Since every caller here is fire-and-forget (this
+// whole capture path runs via `void captureFirstUserPrompt(...)` from
+// event.ts), there's no tool-execution latency at stake in waiting — so
+// instead of polling on a schedule, wait on the actual event
+// (sessionSpanContext.waitForBind resolves the instant bindRoot() fires)
+// with a generous ceiling as a backstop for the case bindRoot() never comes.
+//
+// This ceiling lives in otel-core (shared) because hook.execute/gen_ai spans
+// (tool-span-tracker.ts, recordGenAiCompletionSpan below) need the SAME
+// value via markPendingBind/getContextAwaitingPendingBind — they have no
+// cheap way to run isDelegatedSubSession themselves, so they instead just
+// check the pending marker THIS function sets while it waits.
+function rootRaceMaxWaitMs(): number {
+  return getPendingBindMaxWaitMs()
 }
 
-const ROOT_RACE_RETRY_DELAYS_MS = [20, 40, 60]
+/** @internal test-only: override the wait ceiling so race tests don't have
+ * to wait out several real minutes. Thin wrapper over otel-core's shared
+ * value, kept under this name so existing tests don't need to change. */
+export function __setRootRaceRetryDelaysForTesting(maxWaitMs: number): void {
+  __setPendingBindMaxWaitForTesting(maxWaitMs)
+}
+
+/** @internal test-only: restore the production wait ceiling. */
+export function __resetRootRaceRetryDelaysForTesting(): void {
+  __resetPendingBindMaxWaitForTesting()
+}
 
 async function isDelegatedSubSession(client: OpencodeMessagesClient, sessionID: string): Promise<boolean> {
   if (typeof client.session.get !== "function") return false
@@ -117,6 +156,61 @@ function stripInjectedDirectives(text: string): string {
   return stripped.length > 0 ? stripped : text
 }
 
+const USER_REQUEST_WRAPPER_PATTERN = /<user-request>\s*([\s\S]*?)\s*<\/user-request>/i
+
+// Slash commands / skills (e.g. "/init-deep ulw") get expanded into a much
+// larger constructed prompt: the invoked skill's own instructions wrapped in
+// <skill-instruction>...</skill-instruction> (often a long template — see
+// tools/skill/skill-body.ts), followed by the human's actual typed argument
+// wrapped in <user-request>...</user-request> — the SAME convention
+// hooks/start-work/parse-user-request.ts already relies on for its own
+// parsing. Extracting just the <user-request> inner text is what actually
+// reflects what the human typed; the skill-instruction dump is synthetic
+// template content that swamped the truncation budget and buried it.
+function extractUserRequestWrapper(text: string): string {
+  const match = text.match(USER_REQUEST_WRAPPER_PATTERN)
+  if (!match) return text
+  const inner = match[1]?.trim()
+  return inner && inner.length > 0 ? inner : text
+}
+
+const AUTO_SLASH_COMMAND_TAG_OPEN_MARKER = "<auto-slash-command>"
+const AUTO_SLASH_COMMAND_TAG_CLOSE_MARKER = "</auto-slash-command>"
+const AUTO_SLASH_COMMAND_TAG_PATTERN = /<\/?auto-slash-command>/gi
+// executor.ts's formatCommandTemplate() always puts the human's raw
+// arguments last, under a "## User Request" heading, when any arguments were
+// given (hooks/auto-slash-command/executor.ts:117-121) — everything before
+// that (command name, description, scope, then the full "## Command
+// Instructions" template body) is synthetic. This is a THIRD, independent
+// wrapping mechanism from extractUserRequestWrapper's <user-request> tags
+// and stripInjectedDirectives' mode-directive banner — a general slash
+// command (e.g. "/init-deep ulw") uses this one instead, wrapped in
+// <auto-slash-command>...</auto-slash-command> (hooks/auto-slash-command/hook.ts).
+const AUTO_SLASH_COMMAND_USER_REQUEST_PATTERN = /##\s*User Request\s*\n+([\s\S]*?)(?:<\/auto-slash-command>|$)/i
+
+function extractAutoSlashCommandUserRequest(text: string): string {
+  if (!text.includes(AUTO_SLASH_COMMAND_TAG_CLOSE_MARKER) && !text.includes(AUTO_SLASH_COMMAND_TAG_OPEN_MARKER)) {
+    return text
+  }
+  const match = text.match(AUTO_SLASH_COMMAND_USER_REQUEST_PATTERN)
+  const inner = match?.[1]?.trim()
+  if (inner && inner.length > 0) return inner
+  // No "## User Request" section — the command was invoked with no free-text
+  // argument, so there's nothing more specific to extract. Just drop the
+  // wrapper tags rather than showing the raw <auto-slash-command> markup.
+  return text.replace(AUTO_SLASH_COMMAND_TAG_PATTERN, "").trim()
+}
+
+// Applied everywhere a captured prompt is about to be stored/displayed, in
+// order from outermost wrapper to innermost: a general slash command's
+// <auto-slash-command> template (down to its "## User Request" section),
+// then a skill's <user-request> tag (discarding its <skill-instruction>
+// dump), then any mode directive banner left in what remains — covers a
+// message wrapped by any one of these, or several at once.
+function cleanCapturedPromptText(text: string): string {
+  return stripInjectedDirectives(extractUserRequestWrapper(extractAutoSlashCommandUserRequest(text)))
+}
+
 // A part only counts as "real user input" when it's neither flagged
 // `synthetic: true` nor carries the OMO_INTERNAL_INITIATOR marker — internal
 // delegation/continuation prompts use that marker specifically so display
@@ -142,7 +236,7 @@ function extractText(message: SDKMessage | undefined): string | undefined {
   // when there's no real human text to show instead.
   const text = joinTextParts(parts, true) || joinTextParts(parts, false)
   if (text.length === 0) return undefined
-  return truncate(stripInjectedDirectives(text))
+  return truncate(cleanCapturedPromptText(text))
 }
 
 // sessionID → prompt text captured at LLM-request time (see
@@ -173,7 +267,7 @@ export function captureOutgoingPrompt(messages: readonly OutgoingMessage[]): voi
       if (lastOutgoingPromptBySession.size >= MAX_TRACKED_MESSAGE_IDS) {
         lastOutgoingPromptBySession.clear()
       }
-      lastOutgoingPromptBySession.set(sessionID, truncate(stripInjectedDirectives(text)))
+      lastOutgoingPromptBySession.set(sessionID, truncate(cleanCapturedPromptText(text)))
       return
     }
   } catch (error) {
@@ -266,7 +360,12 @@ export async function recordGenAiCompletionSpan(
       ...(response ? { "gen_ai.completion": response } : {}),
     }
 
-    const parentContext = sessionSpanContext.getContext(sessionID)
+    // Awaits the pending-bind marker (set by captureFirstUserPrompt while it
+    // waits on a delegated sub-agent's bindRoot) instead of a plain
+    // getContext() — safe to wait here since this whole function is already
+    // fire-and-forget from event.ts (`void recordGenAiCompletionSpan(...)`),
+    // so there's no tool-execution latency to protect.
+    const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(sessionID)
     const span = resolveTracer().startSpan(
       `gen_ai.completion.${modelID}`,
       { attributes, ...(createdMs !== undefined ? { startTime: createdMs } : {}) },
@@ -325,8 +424,9 @@ type UserMessageInfo = {
  * still occasionally resolve first (observed live: a handful of sub-agent
  * test-invocation prompts each landed in their own orphaned single-span
  * trace instead of nesting under agent.execute.*). When the session turns
- * out to have a parentID and no root is bound yet, briefly retry before
- * deciding — long enough for the synchronous bindRoot() call to land.
+ * out to have a parentID and no root is bound yet, wait for that bindRoot()
+ * event before deciding — see rootRaceMaxWaitMs's comment for why this is
+ * an event-driven wait with a generous ceiling rather than a short retry.
  */
 export async function captureFirstUserPrompt(
   info: UserMessageInfo,
@@ -366,26 +466,54 @@ export async function captureFirstUserPrompt(
     // this to once per distinct message.
     const isDelegated = await isDelegatedSubSession(client, sessionID)
     if (isDelegated && !sessionSpanContext.hasRoot(sessionID)) {
-      for (const delayMs of ROOT_RACE_RETRY_DELAYS_MS) {
-        if (sessionSpanContext.hasRoot(sessionID)) break
-        await sleep(delayMs)
+      // Mark this session as awaiting a bind so hook.execute/gen_ai code
+      // (which has no cheap way to run the isDelegatedSubSession check
+      // itself) knows to wait too, instead of eagerly stamping its own
+      // generic root the instant it sees none yet — see
+      // getContextAwaitingPendingBind's doc comment for why that matters.
+      sessionSpanContext.markPendingBind(sessionID)
+      const waitStartedAt = Date.now()
+      try {
+        await sessionSpanContext.waitForBind(sessionID, rootRaceMaxWaitMs())
+      } finally {
+        sessionSpanContext.clearPendingBind(sessionID)
+      }
+      // @debug-temp: pin down a live orphan-trace repro (delegated session
+      // still has no bound root after the wait) — remove once root-caused.
+      if (!sessionSpanContext.hasRoot(sessionID)) {
+        log("[otel][debug] pending-bind wait ended WITHOUT a bound root", {
+          sessionID,
+          messageID: id,
+          waitedMs: Date.now() - waitStartedAt,
+        })
       }
     }
 
     const createdMs = num(info.time?.created)
     const attributes: Attributes = { "gen_ai.prompt": prompt, "session.id": sessionID }
+    // Named by isDelegated even in the create-a-new-root case: if this
+    // session IS a confirmed delegated sub-agent (parentID present) but
+    // bindRoot() still never arrived even after the full retry above (the
+    // timeout fallback), self-rooting it as "user.prompt" would mislabel a
+    // synthetic delegation prompt as real human input — exactly what was
+    // observed live for a background sub-agent test prompt ("Return a
+    // simple JSON response...") that ended up as its own standalone
+    // "user.prompt"-rooted trace instead of "agent.prompt".
+    const rootName = isDelegated ? "agent.prompt" : "user.prompt"
     const { context: parentContext, created } = sessionSpanContext.getOrCreateNamedRootContext(
       sessionID,
-      "user.prompt",
+      rootName,
       undefined,
       attributes,
       createdMs,
     )
     if (created) {
       // This call established the root — either the session's true first
-      // message, or the first message of a fresh trace segment after the
-      // previous root expired. It already IS the "user.prompt" stamp with
-      // the prompt attribute attached, so there's nothing further to record.
+      // message, the first message of a fresh trace segment after the
+      // previous root expired, or (rootName === "agent.prompt") a delegated
+      // sub-agent whose bindRoot() never arrived within the retry window.
+      // It already IS the stamp with the prompt attribute attached, so
+      // there's nothing further to record.
       return
     }
 

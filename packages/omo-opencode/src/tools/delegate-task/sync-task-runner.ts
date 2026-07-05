@@ -1,3 +1,5 @@
+import type { Span } from "@opentelemetry/api"
+import { sessionSpanContext } from "@oh-my-opencode/otel-core"
 import type { TaskToastManager } from "../../features/task-toast-manager/manager"
 import type { ModelFallbackInfo } from "../../features/task-toast-manager/types"
 import type { ModelFallbackState } from "../../hooks/model-fallback/hook"
@@ -21,6 +23,7 @@ type SyncTaskRunnerInput = {
   readonly fallbackChain: FallbackEntry[] | undefined
   readonly deps: SyncTaskDeps
   readonly sessionID: string
+  readonly span: Span
   readonly spawnDepth: number
   readonly taskId: string
   readonly startTime: Date
@@ -73,6 +76,7 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
     agentToUse,
     fallbackChain,
     deps,
+    span,
     spawnDepth,
     taskId,
     startTime,
@@ -191,6 +195,14 @@ export async function runSyncTaskLoop(input: SyncTaskRunnerInput): Promise<strin
       }
 
       activeSessionID = retrySessionResult.sessionID
+      // Re-bind: sync-task.ts's own bindRoot() call only covers the
+      // FIRST session — a poll-error fallback retry here creates a brand
+      // new session for the same agent.execute span, and without this,
+      // that new session's captureFirstUserPrompt would wait out its full
+      // pending-bind ceiling and self-root as an orphaned standalone trace
+      // (the same bug found live for background-task.ts's model-fallback
+      // retries — see features/background-agent/manager.ts).
+      sessionSpanContext.bindRoot(activeSessionID, span)
       setSyncSessionID(activeSessionID)
       effectiveCategoryModel = nextFallbackModel
       await registerSyncSession(activeSessionID)

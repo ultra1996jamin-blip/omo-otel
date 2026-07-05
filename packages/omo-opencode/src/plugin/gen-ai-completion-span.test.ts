@@ -5,7 +5,13 @@ import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel, sessionSpanContext } from "@oh-my-opencode/otel-core"
 import { trace } from "@opentelemetry/api"
 
-import { captureFirstUserPrompt, captureOutgoingPrompt, recordGenAiCompletionSpan } from "./gen-ai-completion-span"
+import {
+  __resetRootRaceRetryDelaysForTesting,
+  __setRootRaceRetryDelaysForTesting,
+  captureFirstUserPrompt,
+  captureOutgoingPrompt,
+  recordGenAiCompletionSpan,
+} from "./gen-ai-completion-span"
 
 describe("recordGenAiCompletionSpan", () => {
   afterEach(() => {
@@ -357,15 +363,16 @@ describe("captureFirstUserPrompt", () => {
     }
   })
 
-  test("waits briefly for a sub-agent's root to bind instead of stamping an orphaned standalone root", async () => {
+  test("waits for a sub-agent's root to bind instead of stamping an orphaned standalone root", async () => {
     // given — reproduces the live bug: bindRoot() for a delegated sub-agent
     // session always runs synchronously right after its sessionID is known,
     // but this function's own async message fetch can occasionally resolve
-    // first. Without the retry, this would eagerly stamp a standalone root
+    // first. Without the wait, this would eagerly stamp a standalone root
     // (its own new trace) that bindRoot() then silently supersedes moments
     // later, leaving the stamp as a disconnected single-span trace forever.
     const dir = mkdtempSync(join(tmpdir(), "delegation-race-test-"))
     try {
+      __setRootRaceRetryDelaysForTesting(5_000)
       const handle = initializeOtel({
         env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
       })
@@ -380,7 +387,7 @@ describe("captureFirstUserPrompt", () => {
 
       // when — bindRoot lands shortly after this call starts, within the retry window
       const capturePromise = captureFirstUserPrompt({ id: "user_race2" }, sessionID, client)
-      setTimeout(() => sessionSpanContext.bindRoot(sessionID, agentExecuteSpan), 30)
+      setTimeout(() => sessionSpanContext.bindRoot(sessionID, agentExecuteSpan), 15)
       await capturePromise
       agentExecuteSpan.end()
       await handle.shutdown()
@@ -396,16 +403,75 @@ describe("captureFirstUserPrompt", () => {
       expect(promptSpan.parentSpanId).toBe(agentExecuteSpan.spanContext().spanId)
       expect(promptSpan.traceId).toBe(agentExecuteSpan.spanContext().traceId)
     } finally {
+      __resetRootRaceRetryDelaysForTesting()
       rmSync(dir, { recursive: true, force: true })
     }
   })
 
-  test("falls back to stamping its own root if a sub-agent's bind never arrives within the retry window", async () => {
-    // given — the retry is a bounded grace period, not a guarantee; if
+  test("survives a BACKGROUND delegation's much longer bindRoot delay (waitForBackgroundSessionStart), not just a sync one", async () => {
+    // given — reproduces the live bug precisely: background delegation
+    // (delegate-task/background-task.ts, call-omo-agent/background-executor.ts)
+    // only calls bindRoot() after waitForBackgroundSessionStart() reports the
+    // session started — a 100ms-interval poll loop, not an immediate
+    // synchronous call like the sync path. Observed live: a batch of
+    // background sub-agent dispatches next to sync ones in the same
+    // orchestrator run — the sync ones got agent.prompt correctly, several
+    // background ones did not (each became a disconnected user.prompt-rooted
+    // trace) because the original 20/40/60ms retry budget was nowhere near
+    // long enough for this. This test's delay (well past the old fixed-schedule
+    // total) would have failed before the fix and must pass now — the
+    // event-driven wait resolves the instant bindRoot() fires regardless of
+    // how generous the ceiling is.
+    const dir = mkdtempSync(join(tmpdir(), "delegation-race-background-test-"))
+    try {
+      __setRootRaceRetryDelaysForTesting(5_000)
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-background-sub-agent-race"
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_race4", parts: [{ type: "text", text: "Test the librarian agent." }] }],
+          get: async () => ({ data: { parentID: "session-orchestrator" } }),
+        },
+      }
+      const agentExecuteSpan = trace.getTracer("test").startSpan("agent.execute.librarian")
+
+      // when — bindRoot lands well past the old 120ms budget (at 300ms),
+      // simulating a slow waitForBackgroundSessionStart poll cycle
+      const capturePromise = captureFirstUserPrompt({ id: "user_race4" }, sessionID, client)
+      setTimeout(() => sessionSpanContext.bindRoot(sessionID, agentExecuteSpan), 300)
+      await capturePromise
+      agentExecuteSpan.end()
+      await handle.shutdown()
+
+      // then — still nests under agent.execute, no disconnected trace
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const lines = contents.split("\n").filter((line) => line.trim().length > 0)
+      const spans = lines.map((line) => JSON.parse(line))
+      expect(spans.find((s) => s.name === "user.prompt")).toBeUndefined()
+      const promptSpan = spans.find((s) => s.name === "agent.prompt")
+      expect(promptSpan).toBeDefined()
+      expect(promptSpan.parentSpanId).toBe(agentExecuteSpan.spanContext().spanId)
+      expect(promptSpan.traceId).toBe(agentExecuteSpan.spanContext().traceId)
+    } finally {
+      __resetRootRaceRetryDelaysForTesting()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("falls back to stamping its own root as agent.prompt (not user.prompt) if a sub-agent's bind never arrives within the wait ceiling", async () => {
+    // given — the wait is a bounded grace period, not a guarantee; if
     // bindRoot() genuinely never comes, this must still record something
-    // rather than silently dropping the prompt.
+    // rather than silently dropping the prompt. Reproduces a live bug: this
+    // self-rooted stamp was hardcoded to "user.prompt" regardless of
+    // isDelegated, mislabeling a confirmed sub-agent session's synthetic
+    // delegation prompt (e.g. "Return a simple JSON response...") as if a
+    // human had typed it. Since isDelegatedSubSession already confirmed a
+    // parentID here, it must be named agent.prompt even in this fallback.
     const dir = mkdtempSync(join(tmpdir(), "delegation-race-timeout-test-"))
     try {
+      __setRootRaceRetryDelaysForTesting(15)
       const handle = initializeOtel({
         env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
       })
@@ -420,15 +486,16 @@ describe("captureFirstUserPrompt", () => {
       await captureFirstUserPrompt({ id: "user_race3" }, "session-sub-agent-timeout", client)
       await handle.shutdown()
 
-      // then — still recorded, as the session's own root
+      // then — still recorded, as the session's own root, but named agent.prompt
       const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
       const lines = contents.split("\n").filter((line) => line.trim().length > 0)
       expect(lines.length).toBe(1)
       const parsed = JSON.parse(lines[0]!)
-      expect(parsed.name).toBe("user.prompt")
+      expect(parsed.name).toBe("agent.prompt")
       expect(parsed.parentSpanId).toBeUndefined()
       expect(parsed.attributes["gen_ai.prompt"]).toBe("늦어도 결국 기록됨")
     } finally {
+      __resetRootRaceRetryDelaysForTesting()
       rmSync(dir, { recursive: true, force: true })
     }
   })
@@ -585,6 +652,192 @@ describe("captureFirstUserPrompt", () => {
       const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
       expect(promptLine).toBeDefined()
       expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe("트레이스 연결 고쳐줘")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("extracts the real human argument from an auto-slash-command template's ## User Request section", async () => {
+    // given — reproduces the live bug precisely: typing "/init-deep ulw"
+    // goes through hooks/auto-slash-command/hook.ts, which wraps the whole
+    // reconstructed command template (name, description, scope, the full
+    // "## Command Instructions" body, THEN "## User Request\n{args}") in
+    // <auto-slash-command>...</auto-slash-command> (see executor.ts's
+    // formatCommandTemplate, lines 78-124). Before this fix, stripInjectedDirectives'
+    // "\n\n---\n\n" heuristic accidentally matched the template's OWN
+    // separator before "## User Request", leaving "## User Request\n\nulw\n
+    // </auto-slash-command>" as the captured prompt — not the same bug as
+    // the <user-request>-tag case above, a third independent mechanism.
+    const dir = mkdtempSync(join(tmpdir(), "auto-slash-command-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const injectedText = [
+        "<auto-slash-command>",
+        "# /init-deep Command",
+        "",
+        "**User Arguments**: ulw",
+        "",
+        "**Scope**: project",
+        "---",
+        "## Command Instructions",
+        "",
+        "## Anti-Patterns",
+        "",
+        "- **Static agent count**: MUST vary agents based on project size/depth",
+        "- **Sequential execution**: MUST parallel (explore + LSP + codegraph concurrent)",
+        "",
+        "",
+        "---",
+        "## User Request",
+        "",
+        "ulw",
+        "</auto-slash-command>",
+      ].join("\n")
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_autoslash", parts: [{ type: "text", text: injectedText }] }],
+        },
+      }
+
+      // when
+      await captureFirstUserPrompt({ id: "user_autoslash" }, "session-auto-slash-command", client)
+      await handle.shutdown()
+
+      // then — just "ulw", not "## User Request\n\nulw\n</auto-slash-command>"
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
+      expect(promptLine).toBeDefined()
+      expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe("ulw")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("falls back to dropping just the wrapper tags when an auto-slash-command has no free-text arguments", async () => {
+    // given — formatCommandTemplate only appends "## User Request" when args
+    // is non-empty (executor.ts:117). A bare "/init-deep" with no argument
+    // never gets that section — there's nothing more specific to extract.
+    const dir = mkdtempSync(join(tmpdir(), "auto-slash-command-no-args-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const injectedText = [
+        "<auto-slash-command>",
+        "# /init-deep Command",
+        "",
+        "**Scope**: project",
+        "---",
+        "## Command Instructions",
+        "",
+        "짧은 커맨드 본문",
+        "</auto-slash-command>",
+      ].join("\n")
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_autoslash_noargs", parts: [{ type: "text", text: injectedText }] }],
+        },
+      }
+
+      // when
+      await captureFirstUserPrompt({ id: "user_autoslash_noargs" }, "session-auto-slash-command-no-args", client)
+      await handle.shutdown()
+
+      // then — tags dropped, template body shown as-is (nothing more precise to extract)
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
+      expect(promptLine).toBeDefined()
+      const capturedPrompt = JSON.parse(promptLine!).attributes["gen_ai.prompt"]
+      expect(capturedPrompt).not.toContain("<auto-slash-command>")
+      expect(capturedPrompt).not.toContain("</auto-slash-command>")
+      expect(capturedPrompt).toContain("짧은 커맨드 본문")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("extracts the real human argument from a slash-command's <user-request> wrapper, discarding the <skill-instruction> dump", async () => {
+    // given — reproduces the live bug: typing "/init-deep ulw" expands into
+    // a huge <skill-instruction> template (the skill's own doc) followed by
+    // <user-request>ulw</user-request> (the actual typed argument). Without
+    // extraction, gen_ai.prompt showed the whole skill-instruction dump with
+    // "ulw" buried at the very end, past the 4000-char truncation point in
+    // real cases — effectively "the prompt I typed wasn't captured at all".
+    const dir = mkdtempSync(join(tmpdir(), "user-request-wrapper-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const injectedText = [
+        "<skill-instruction>",
+        "## Anti-Patterns",
+        "",
+        "- **Static agent count**: MUST vary agents based on project size/depth",
+        "- **Sequential execution**: MUST parallel (explore + LSP + codegraph concurrent)",
+        "</skill-instruction>",
+        "",
+        "<user-request>",
+        "ulw",
+        "</user-request>",
+      ].join("\n")
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_initdeep", parts: [{ type: "text", text: injectedText }] }],
+        },
+      }
+
+      // when
+      await captureFirstUserPrompt({ id: "user_initdeep" }, "session-user-request-wrapper", client)
+      await handle.shutdown()
+
+      // then — just "ulw", not the skill-instruction dump
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
+      expect(promptLine).toBeDefined()
+      expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe("ulw")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("<user-request> extraction composes with mode-directive stripping when both wrappers are present", async () => {
+    // given — if the extracted user-request argument itself triggers
+    // keyword-detector (e.g. contains "ultrawork"), that injection wraps
+    // the SAME text part further. Extraction must happen first so
+    // stripInjectedDirectives sees a clean boundary either way.
+    const dir = mkdtempSync(join(tmpdir(), "user-request-plus-directive-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const injectedText = [
+        "<skill-instruction>irrelevant template body</skill-instruction>",
+        "",
+        "<user-request>",
+        "## MANDATORY DIRECTIVE",
+        "",
+        "---",
+        "",
+        "실제 요청 내용",
+        "</user-request>",
+      ].join("\n")
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_both", parts: [{ type: "text", text: injectedText }] }],
+        },
+      }
+
+      // when
+      await captureFirstUserPrompt({ id: "user_both" }, "session-user-request-plus-directive", client)
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
+      expect(promptLine).toBeDefined()
+      expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe("실제 요청 내용")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

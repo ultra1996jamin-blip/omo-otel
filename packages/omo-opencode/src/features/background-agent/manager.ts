@@ -823,6 +823,22 @@ export class BackgroundManager {
       return
     }
 
+    // Bind THIS attempt's session as the OTEL root for the task's
+    // agent.execute span on every attempt, not just the first: a
+    // model-fallback retry (tryFallbackRetry, on a retryable provider
+    // error) creates a brand new session for the same task and re-enters
+    // this exact code path, but background-task.ts's own bindRoot() call
+    // (in executeBackgroundTask) only ever runs once, for whichever
+    // session existed when its single waitForBackgroundSessionStart call
+    // first resolved. Without this, a retried session's bindRoot() never
+    // fires at all — observed live as captureFirstUserPrompt waiting out
+    // its full pending-bind ceiling and self-rooting a standalone orphan
+    // trace, for every task that hit at least one fallback retry.
+    const agentSpan = backgroundTaskSpanRegistry.get(task.id)
+    if (agentSpan) {
+      sessionSpanContext.bindRoot(sessionID, agentSpan)
+    }
+
     task.progress = {
       toolCalls: 0,
       lastUpdate: new Date(),
