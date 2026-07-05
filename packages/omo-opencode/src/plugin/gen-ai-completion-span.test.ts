@@ -240,6 +240,53 @@ describe("captureFirstUserPrompt", () => {
     }
   })
 
+  test("re-establishes user.prompt as the new root after the previous root expired (long-idle conversation resumed)", async () => {
+    // given — reproduces the live bug: SessionSpanContext expires a session's
+    // root after DEFAULT_SESSION_IDLE_MS of inactivity (simulated here via
+    // release()). The old dedup keyed on sessionID would permanently block
+    // this session from ever getting user.prompt again — the next turn would
+    // silently fall back to an anonymous session.turn root with no visible
+    // prompt at all. Deduping by message id instead means a later message
+    // (different id, same sessionID) still gets its own chance.
+    const dir = mkdtempSync(join(tmpdir(), "session-resume-after-expiry-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-long-idle-resume"
+      const client = {
+        session: {
+          messages: async () => [
+            { id: "user_turn_1", parts: [{ type: "text", text: "첫 번째 턴" }] },
+            { id: "user_turn_2", parts: [{ type: "text", text: "10분 넘게 쉬었다가 재개한 턴" }] },
+          ],
+        },
+      }
+
+      // when — first turn captured normally, then the root expires (idle timeout)
+      await captureFirstUserPrompt({ id: "user_turn_1" }, sessionID, client)
+      sessionSpanContext.release(sessionID) // simulates DEFAULT_SESSION_IDLE_MS elapsing
+      await captureFirstUserPrompt({ id: "user_turn_2" }, sessionID, client)
+      await handle.shutdown()
+
+      // then — two separate user.prompt roots, not one user.prompt + one
+      // silently-dropped session.turn
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const userPromptSpans = spans.filter((s) => s.name === "user.prompt")
+      expect(userPromptSpans).toHaveLength(2)
+      expect(userPromptSpans.map((s) => s.attributes["gen_ai.prompt"]).sort()).toEqual(
+        ["10분 넘게 쉬었다가 재개한 턴", "첫 번째 턴"].sort()
+      )
+      expect(spans.find((s) => s.name === "session.turn")).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("the user.prompt span IS the trace root (no separate parent) when nothing else raced ahead", async () => {
     // given
     const dir = mkdtempSync(join(tmpdir(), "first-prompt-root-test-"))
@@ -272,13 +319,15 @@ describe("captureFirstUserPrompt", () => {
     }
   })
 
-  test("falls back to a child agent.prompt span (not user.prompt) when another span already won the root race", async () => {
-    // given — simulates a sub-agent session whose root was already bound to
-    // the dispatching agent.execute span (delegate-task/call-omo-agent)
-    // before this async fetch resolves — the fallback path, taken every time
-    // for a delegated sub-agent. Named agent.prompt, not user.prompt, since
-    // the text a sub-agent receives is the orchestrator's own delegation
-    // prompt, not something a human typed.
+  test("falls back to a child user.prompt span (non-delegated race) when an unrelated span already won the root race", async () => {
+    // given — a plain top-level session (no parentID) where some unrelated
+    // span raced ahead and stamped a generic root before this async fetch
+    // resolved. This message is still the session's genuine first message,
+    // so it should surface as a child user.prompt — NOT silently skipped
+    // (skipping is only correct for a later turn of an already-live
+    // conversation, not this "lost the race but still the first message"
+    // case) and NOT labeled agent.prompt (no delegation involved: the mock
+    // client has no session.get, so isDelegatedSubSession resolves false).
     const dir = mkdtempSync(join(tmpdir(), "first-prompt-race-test-"))
     try {
       const handle = initializeOtel({
@@ -296,9 +345,9 @@ describe("captureFirstUserPrompt", () => {
       await captureFirstUserPrompt({ id: "user_raced" }, sessionID, client)
       await handle.shutdown()
 
-      // then — a session.turn root plus a child agent.prompt span
+      // then — a session.turn root plus a child user.prompt span
       const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
-      const promptLine = contents.split("\n").find((line) => line.includes("\"name\":\"agent.prompt\""))
+      const promptLine = contents.split("\n").find((line) => line.includes("\"name\":\"user.prompt\""))
       expect(promptLine).toBeDefined()
       const parsed = JSON.parse(promptLine!)
       expect(parsed.parentSpanId).toBeDefined()

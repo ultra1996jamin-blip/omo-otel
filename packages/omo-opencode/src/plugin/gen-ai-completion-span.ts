@@ -6,7 +6,16 @@ import { normalizeSDKResponse } from "../shared/normalize-sdk-response"
 
 const MAX_TRACKED_MESSAGE_IDS = 5000
 const recordedMessageIds = new Set<string>()
-const recordedFirstPromptSessionIds = new Set<string>()
+// Deduped by MESSAGE id, not sessionID. SessionSpanContext's root expires
+// after DEFAULT_SESSION_IDLE_MS of inactivity — a long conversation with a
+// gap longer than that gets a fresh root (a new trace) for its next turn.
+// Deduping by sessionID forever would permanently block that next turn from
+// ever re-establishing user.prompt as the new root (observed live: the same
+// session.id later resumed under a brand new TraceId with only an anonymous
+// session.turn root, never user.prompt again). Per-message dedup still
+// prevents reprocessing the same message if message.updated fires more than
+// once for it, while letting every new message get its own chance.
+const recordedFirstPromptMessageIds = new Set<string>()
 
 // Prompt/response text is genuinely sensitive (QA-05 in the original design
 // doc says span attributes should NOT carry raw prompt/code content) — this
@@ -24,12 +33,12 @@ function shouldRecord(messageId: string): boolean {
   return true
 }
 
-function shouldCaptureFirstPrompt(sessionID: string): boolean {
-  if (recordedFirstPromptSessionIds.has(sessionID)) return false
-  if (recordedFirstPromptSessionIds.size >= MAX_TRACKED_MESSAGE_IDS) {
-    recordedFirstPromptSessionIds.clear()
+function shouldCaptureFirstPrompt(messageId: string): boolean {
+  if (recordedFirstPromptMessageIds.has(messageId)) return false
+  if (recordedFirstPromptMessageIds.size >= MAX_TRACKED_MESSAGE_IDS) {
+    recordedFirstPromptMessageIds.clear()
   }
-  recordedFirstPromptSessionIds.add(sessionID)
+  recordedFirstPromptMessageIds.add(messageId)
   return true
 }
 
@@ -284,22 +293,31 @@ type UserMessageInfo = {
 }
 
 /**
- * Records the first user-role message of a session, making it the trace's
- * root span (named `user.prompt`) whenever this call wins the race to
- * create the session — which is the common case for a top-level session,
- * since this fires right as the human's message lands, before any tool/agent
- * span could exist yet. Being the root means it's guaranteed to render first
- * in the trace waterfall, not nested under a generic stamp.
+ * Records a user-role message as either the trace's root span (`user.prompt`)
+ * or, for a delegated sub-agent session, a child of the dispatching
+ * `agent.execute.*` span (`agent.prompt`).
  *
- * If some other span already created the root first (`created` is false),
- * this attaches a child instead — that stamp has already ended and can't be
- * renamed or amended. In practice this fallback path is what fires for a
- * DELEGATED sub-agent session: its root is bound to the dispatching
- * `agent.execute.*` span (see delegate-task/call-omo-agent). The text a
- * sub-agent received is NOT something the human typed (it's the
- * orchestrator's own delegation prompt, e.g. "This is a test invocation.
- * Respond with...") — naming this fallback span `agent.prompt` instead of
- * `user.prompt` keeps that visually distinct in Jaeger.
+ * Runs once per MESSAGE (not once per session — see the dedup Set's comment):
+ * whenever `sessionSpanContext` currently has no root for this sessionID,
+ * this call establishes one, named `user.prompt`. That covers both the
+ * session's true first message AND a later message that arrives after the
+ * previous root expired from 10 minutes of inactivity (`DEFAULT_SESSION_IDLE_MS`)
+ * — otherwise that next turn would silently fall back to an anonymous
+ * `session.turn` stamp with no visible prompt at all.
+ *
+ * If a root already exists for a DELEGATED sub-agent session (bound via
+ * `bindRoot()` to its dispatching `agent.execute.*` span — see
+ * delegate-task/call-omo-agent), this attaches a child named `agent.prompt`
+ * instead: the text a sub-agent receives is NOT something the human typed
+ * (it's the orchestrator's own delegation prompt, e.g. "This is a test
+ * invocation. Respond with..."), so it's kept visually distinct from real
+ * human input.
+ *
+ * If a root already exists for a NON-delegated (top-level) session, this is
+ * just a later turn of a still-alive conversation (well within the idle
+ * window) — intentionally not re-recorded here; that turn's prompt is
+ * already covered by `gen_ai.completion`'s own `gen_ai.prompt` (captured at
+ * LLM-call time, see `captureOutgoingPrompt`).
  *
  * bindRoot() for a sub-agent session always runs synchronously right after
  * its sessionID is known, strictly before the delegating tool sends that
@@ -307,10 +325,8 @@ type UserMessageInfo = {
  * still occasionally resolve first (observed live: a handful of sub-agent
  * test-invocation prompts each landed in their own orphaned single-span
  * trace instead of nesting under agent.execute.*). When the session turns
- * out to have a parentID (i.e. it's a sub-agent session, not top-level) and
- * no root is bound yet, briefly retry before deciding — long enough for the
- * synchronous bindRoot() call to land, without meaningfully delaying the
- * common (already-bound) case.
+ * out to have a parentID and no root is bound yet, briefly retry before
+ * deciding — long enough for the synchronous bindRoot() call to land.
  */
 export async function captureFirstUserPrompt(
   info: UserMessageInfo,
@@ -321,7 +337,7 @@ export async function captureFirstUserPrompt(
     if (!client) return
     const id = typeof info.id === "string" ? info.id : undefined
     if (!id) return
-    if (!shouldCaptureFirstPrompt(sessionID)) return
+    if (!shouldCaptureFirstPrompt(id)) return
 
     const raw = await client.session.messages({ path: { id: sessionID } })
     const messages = normalizeSDKResponse<SDKMessage[]>(raw, [])
@@ -331,7 +347,25 @@ export async function captureFirstUserPrompt(
     const prompt = extractText(userMessage)
     if (!prompt) return
 
-    if (!sessionSpanContext.hasRoot(sessionID) && (await isDelegatedSubSession(client, sessionID))) {
+    // Whether `id` is the session's chronologically first message (vs a
+    // later turn of an already-live conversation) — the only way to tell
+    // apart, for a NON-delegated session with an existing root, "an unrelated
+    // span raced ahead of this genuinely-first message" (should still surface
+    // as a child) from "this is turn 2/3/... of an ongoing chat" (already
+    // covered by gen_ai.completion's own gen_ai.prompt; skip). A session's
+    // history always opens with the user's own message, so the first entry
+    // client.session.messages() returns is that message — no role field
+    // needed (and not always present on every message shape seen in practice).
+    const isSessionsFirstMessage = messages.length > 0 && messageId(messages[0]) === id
+
+    // Always determined (not just when a root is missing) — needed below to
+    // decide whether an *existing* root means "later turn of the same
+    // top-level conversation" (skip) or "bound to a delegating agent.execute
+    // span" (attach as agent.prompt). Only worth the extra RPC when there's
+    // actually a decision to make; shouldCaptureFirstPrompt already limits
+    // this to once per distinct message.
+    const isDelegated = await isDelegatedSubSession(client, sessionID)
+    if (isDelegated && !sessionSpanContext.hasRoot(sessionID)) {
       for (const delayMs of ROOT_RACE_RETRY_DELAYS_MS) {
         if (sessionSpanContext.hasRoot(sessionID)) break
         await sleep(delayMs)
@@ -348,18 +382,28 @@ export async function captureFirstUserPrompt(
       createdMs,
     )
     if (created) {
-      // This call created the session's root — it already IS the
-      // "user.prompt" stamp with the prompt attribute attached, so there's
-      // nothing further to record.
+      // This call established the root — either the session's true first
+      // message, or the first message of a fresh trace segment after the
+      // previous root expired. It already IS the "user.prompt" stamp with
+      // the prompt attribute attached, so there's nothing further to record.
       return
     }
 
-    // Some other span raced ahead and already created the root — in
-    // practice, always a sub-agent session whose root is the dispatching
-    // agent.execute span (see doc comment above). Name it agent.prompt so
-    // it reads as "what this agent received", not "what the human typed".
+    if (!isDelegated && !isSessionsFirstMessage) {
+      // A root already existed, this isn't a delegated sub-session, and this
+      // isn't even the session's first message — a later turn of a
+      // still-alive top-level conversation. Its prompt is covered separately
+      // by gen_ai.completion's own gen_ai.prompt; adding another span here
+      // would misleadingly look like a second person.
+      return
+    }
+
+    // Either a delegated sub-session (root bound to its dispatching
+    // agent.execute span) or a non-delegated session whose genuine first
+    // message lost the root race to an unrelated span — either way, attach
+    // a visible child. Only the delegated case is *not* the human speaking.
     const span = resolveTracer().startSpan(
-      "agent.prompt",
+      isDelegated ? "agent.prompt" : "user.prompt",
       {
         attributes,
         ...(createdMs !== undefined ? { startTime: createdMs } : {}),
