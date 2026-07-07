@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel } from "@oh-my-opencode/otel-core"
 
+import { __resetKnownMcpServerNamesForTesting, setKnownMcpServerNames } from "../shared/mcp-tool-classifier"
 import { createToolSpanTracker } from "./tool-span-tracker"
 
 describe("createToolSpanTracker", () => {
@@ -74,6 +75,62 @@ describe("createToolSpanTracker", () => {
       expect(hookSpan.attributes["hook.error"]).toBe(false)
       expect(typeof hookSpan.attributes["hook.execution_ms"]).toBe("number")
     } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("tags the span with mcp.server_name when the tool belongs to a known MCP server", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-mcp-test-"))
+    try {
+      setKnownMcpServerNames(["context7"])
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const tracker = createToolSpanTracker()
+      const identity = { tool: "context7_resolve-library-id", sessionID: "session-mcp", callID: "call-mcp" }
+
+      await tracker.start(identity)
+      tracker.end(identity)
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const hookSpan = spans.find((s) => s.name === "hook.execute.context7_resolve-library-id")
+      expect(hookSpan).toBeDefined()
+      expect(hookSpan.attributes["mcp.server_name"]).toBe("context7")
+    } finally {
+      __resetKnownMcpServerNamesForTesting()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("does not add mcp.server_name for a built-in tool", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-builtin-test-"))
+    try {
+      setKnownMcpServerNames(["context7"])
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const tracker = createToolSpanTracker()
+      const identity = { tool: "grep", sessionID: "session-builtin", callID: "call-builtin" }
+
+      await tracker.start(identity)
+      tracker.end(identity)
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const hookSpan = spans.find((s) => s.name === "hook.execute.grep")
+      expect(hookSpan).toBeDefined()
+      expect(hookSpan.attributes["mcp.server_name"]).toBeUndefined()
+    } finally {
+      __resetKnownMcpServerNamesForTesting()
       rmSync(dir, { recursive: true, force: true })
     }
   })

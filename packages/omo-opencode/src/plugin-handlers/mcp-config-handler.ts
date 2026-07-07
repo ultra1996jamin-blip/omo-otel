@@ -2,7 +2,7 @@ import type { OhMyOpenCodeConfig } from "../config";
 import { loadMcpConfigs } from "../features/claude-code-mcp-loader";
 import { createBuiltinMcps } from "../mcp";
 import type { PluginComponents } from "./plugin-components-loader";
-import { log } from "../shared";
+import { log, setKnownMcpServerNames } from "../shared";
 
 type McpEntry = Record<string, unknown>;
 
@@ -66,4 +66,13 @@ export async function applyMcpConfig(params: {
   }
 
   params.config.mcp = merged;
+
+  // Tool calls only arrive at tool.execute.before as a flat name string
+  // (e.g. "context7_resolve-library-id") with no indication they came from
+  // an MCP server rather than a built-in tool. Recording the enabled server
+  // names here lets tool-span-tracker.ts recognize the `${serverName}_`
+  // prefix and tag the resulting hook.execute.* span with mcp.server_name —
+  // otherwise MCP calls are indistinguishable from built-ins in traces/metrics.
+  const enabledServerNames = Object.keys(merged).filter((name) => !isDisabledMcpEntry(merged[name]));
+  setKnownMcpServerNames(enabledServerNames);
 }

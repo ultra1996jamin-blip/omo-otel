@@ -1,5 +1,6 @@
 import { DelegateSpanRegistry, endSpanSafely, sessionSpanContext, startDetachedSpan } from "@oh-my-opencode/otel-core"
 import { log } from "../shared/logger"
+import { getMcpServerNameForTool } from "../shared/mcp-tool-classifier"
 
 export type ToolSpanTracker = ReturnType<typeof createToolSpanTracker>
 
@@ -38,13 +39,20 @@ export function createToolSpanTracker() {
         // session before falling back to auto-vivifying a generic root —
         // see SessionSpanContext.getContextAwaitingPendingBind's doc comment.
         const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(input.sessionID)
+        const mcpServerName = getMcpServerNameForTool(input.tool)
         // OMO calls this mechanism a "hook" (tool.execute.before/after), not
-        // a "tool" — the span name/attributes follow that vocabulary.
+        // a "tool" — the span name/attributes follow that vocabulary. Every
+        // tool call (built-in or MCP-provided) shares this one span shape;
+        // mcp.server_name is the only thing that tells the two apart (see
+        // mcp-tool-classifier.ts) — dashboards/queries filter on its presence
+        // rather than on a separate "mcp.*" span name, since MCP calls never
+        // actually produced their own span kind in practice.
         const span = startDetachedSpan(
           `hook.execute.${input.tool}`,
           {
             "hook.name": input.tool,
             "hook.input.summary": summarizeArgs(input.args),
+            ...(mcpServerName ? { "mcp.server_name": mcpServerName } : {}),
           },
           parentContext,
         )

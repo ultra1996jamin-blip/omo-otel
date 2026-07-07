@@ -183,4 +183,27 @@ describe("applyMcpConfig", () => {
     expect(createBuiltinMcpsSpy).toHaveBeenCalledWith([], pluginConfig, { cwd: TEST_CTX.directory })
   })
 
+  test("registers only enabled server names for MCP-origin tool tagging", async () => {
+    //#given
+    const userMcp = {
+      context7: { type: "remote", url: "https://context7.example.com", enabled: true },
+      firecrawl: { type: "remote", url: "https://firecrawl.example.com", enabled: false },
+    }
+    const config: Record<string, unknown> = { mcp: userMcp }
+    const pluginConfig = createPluginConfig()
+
+    //#when
+    const { applyMcpConfig } = await import("./mcp-config-handler")
+    await applyMcpConfig({ config, ctx: TEST_CTX, pluginConfig, pluginComponents: EMPTY_PLUGIN_COMPONENTS })
+
+    //#then
+    const { getMcpServerNameForTool, __resetKnownMcpServerNamesForTesting } = await import("../shared/mcp-tool-classifier")
+    try {
+      expect(getMcpServerNameForTool("context7_resolve-library-id")).toBe("context7")
+      expect(getMcpServerNameForTool("firecrawl_scrape")).toBeUndefined()
+    } finally {
+      __resetKnownMcpServerNamesForTesting()
+    }
+  })
+
 })
