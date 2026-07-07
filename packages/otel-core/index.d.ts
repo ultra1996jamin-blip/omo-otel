@@ -1,4 +1,4 @@
-import type { Attributes, Context, Span, Tracer } from "@opentelemetry/api";
+import type { Attributes, Context, Meter, Span, Tracer } from "@opentelemetry/api";
 
 export type OtelExporterKind = "otlp" | "jaeger" | "file" | "console";
 
@@ -116,9 +116,19 @@ export type InitializeOtelInput = ResolveOtelConfigInput & {
 export type OtelHandle = {
   readonly enabled: boolean;
   readonly tracer: Tracer;
+  readonly meter: Meter;
   readonly shutdown: () => Promise<void>;
 };
 
 export declare function initializeOtel(input?: InitializeOtelInput): OtelHandle;
 export declare function getActiveTracer(): Tracer;
+export declare function getActiveMeter(): Meter;
 export declare function __resetActiveTracerForTesting(): void;
+
+export declare function recordGenAiUsage(input: {
+  readonly model: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+  readonly cost?: number;
+}): void;

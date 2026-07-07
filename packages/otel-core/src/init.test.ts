@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { __resetActiveTracerForTesting, getActiveTracer, initializeOtel } from "./init"
+import { __resetActiveTracerForTesting, getActiveMeter, getActiveTracer, initializeOtel } from "./init"
 
 describe("initializeOtel", () => {
   afterEach(() => {
@@ -45,6 +45,36 @@ describe("initializeOtel", () => {
       const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
       expect(contents).toContain("test.span")
       expect(contents).toContain("tool.name")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("initializes a real meter and writes counters to the file exporter", async () => {
+    // given
+    const dir = mkdtempSync(join(tmpdir(), "otel-core-metrics-test-"))
+
+    try {
+      // when
+      const handle = initializeOtel({
+        env: {
+          OMO_OTEL_ENABLED: "true",
+          OMO_OTEL_EXPORTER: "file",
+          OMO_OTEL_LOCAL_STORAGE_PATH: dir,
+        },
+      })
+      expect(handle.enabled).toBe(true)
+      expect(getActiveMeter()).toBe(handle.meter)
+
+      const counter = handle.meter.createCounter("test.counter")
+      counter.add(5, { "gen_ai.request.model": "gpt-5.5" })
+
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      expect(contents).toContain("test.counter")
+      expect(contents).toContain("gpt-5.5")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

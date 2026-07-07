@@ -293,6 +293,53 @@ describe("captureFirstUserPrompt", () => {
     }
   })
 
+  test("every turn of a top-level conversation gets its own trace, even well within the idle window", async () => {
+    // given — two user turns on the SAME sessionID, back to back, with no
+    // manual release() and no idle expiry in between (unlike the
+    // "long-idle-resume" test above). Each real top-level turn should still
+    // start a brand-new trace rather than the second turn nesting under (or
+    // being silently skipped in favor of) the first turn's still-alive root.
+    const dir = mkdtempSync(join(tmpdir(), "per-turn-trace-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-multi-turn"
+      const client = {
+        session: {
+          messages: async () => [
+            { id: "user_turn_a", parts: [{ type: "text", text: "첫 번째 질문" }] },
+            { id: "user_turn_b", parts: [{ type: "text", text: "바로 이어서 두 번째 질문" }] },
+          ],
+        },
+      }
+
+      // when — no release() call here: the second turn arrives while the
+      // first turn's root is still well within DEFAULT_SESSION_IDLE_MS
+      await captureFirstUserPrompt({ id: "user_turn_a" }, sessionID, client)
+      await captureFirstUserPrompt({ id: "user_turn_b" }, sessionID, client)
+      await handle.shutdown()
+
+      // then — two separate user.prompt roots (each with no parent span id),
+      // i.e. two distinct traces, not one trace with the second turn skipped
+      // or nested
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const userPromptSpans = spans.filter((s) => s.name === "user.prompt")
+      expect(userPromptSpans).toHaveLength(2)
+      expect(userPromptSpans.every((s) => s.parentSpanId === undefined)).toBe(true)
+      expect(new Set(userPromptSpans.map((s) => s.traceId)).size).toBe(2)
+      expect(userPromptSpans.map((s) => s.attributes["gen_ai.prompt"]).sort()).toEqual(
+        ["바로 이어서 두 번째 질문", "첫 번째 질문"].sort()
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("the user.prompt span IS the trace root (no separate parent) when nothing else raced ahead", async () => {
     // given
     const dir = mkdtempSync(join(tmpdir(), "first-prompt-root-test-"))
@@ -532,10 +579,14 @@ describe("captureFirstUserPrompt", () => {
       await handle.shutdown()
 
       // then — no real human text exists, so the fallback pass surfaces the
-      // internal prompt, but with the marker comment stripped out.
+      // internal prompt (marker comment stripped out), but the root is named
+      // the generic "session.turn" rather than "user.prompt": with no real
+      // human text anywhere in the message, labeling it "user.prompt" would
+      // misrepresent this internal handoff content as something a person typed.
       const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
-      const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
+      const promptLine = contents.split("\n").find((line) => line.includes("session.turn"))
       expect(promptLine).toBeDefined()
+      expect(contents).not.toContain("\"name\":\"user.prompt\"")
       expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe(
         "[CONTEXT] internal handoff prompt built by the plan agent",
       )
@@ -575,6 +626,63 @@ describe("captureFirstUserPrompt", () => {
       const promptLine = contents.split("\n").find((line) => line.includes("user.prompt"))
       expect(promptLine).toBeDefined()
       expect(JSON.parse(promptLine!).attributes["gen_ai.prompt"]).toBe("실제로 사람이 입력한 질문입니다")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("a background-wake notification mid-conversation does not fork a new trace or claim user.prompt", async () => {
+    // given — reproduces a live bug: background-agent/parent-wake-prompt-dispatch.ts
+    // delivers a task-completion notice as a user-role message wrapped in
+    // createInternalAgentTextPart (text + OMO_INTERNAL_INITIATOR marker, no
+    // synthetic:true flag — same shape OpenCode sends for a real second
+    // human turn). Without distinguishing it, the per-turn trace-separation
+    // logic treated it like a genuine new turn: forced release() + a fresh
+    // root literally named "user.prompt" with the raw
+    // "<system-reminder>[BACKGROUND TASK COMPLETED]..." text as its prompt —
+    // indistinguishable in Jaeger from something the human actually typed.
+    const dir = mkdtempSync(join(tmpdir(), "background-wake-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-bg-wake"
+      const client = {
+        session: {
+          messages: async () => [
+            { id: "user_bg_turn_1", parts: [{ type: "text", text: "탐색 좀 백그라운드로 돌려줘" }] },
+            {
+              id: "bg_wake_notice",
+              parts: [
+                {
+                  type: "text",
+                  text: "<system-reminder>\n[BACKGROUND TASK COMPLETED]\n[ALL BACKGROUND TASKS COMPLETE]\n</system-reminder>\n<!-- OMO_INTERNAL_INITIATOR -->",
+                },
+              ],
+            },
+          ],
+        },
+      }
+
+      // when
+      await captureFirstUserPrompt({ id: "user_bg_turn_1" }, sessionID, client)
+      const rootAfterTurn1 = sessionSpanContext.getContext(sessionID)
+      await captureFirstUserPrompt({ id: "bg_wake_notice" }, sessionID, client)
+      const rootAfterWake = sessionSpanContext.getContext(sessionID)
+      await handle.shutdown()
+
+      // then — exactly one span (the real turn 1 user.prompt); the wake
+      // notification produced no span of its own, and the session's root
+      // context is untouched (same trace, no fork/release)
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      expect(spans).toHaveLength(1)
+      expect(spans[0].name).toBe("user.prompt")
+      expect(spans[0].attributes["gen_ai.prompt"]).toBe("탐색 좀 백그라운드로 돌려줘")
+      expect(trace.getSpanContext(rootAfterWake)?.traceId).toBe(trace.getSpanContext(rootAfterTurn1)?.traceId)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
