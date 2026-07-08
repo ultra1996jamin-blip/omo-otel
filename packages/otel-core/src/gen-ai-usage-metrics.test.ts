@@ -47,6 +47,56 @@ describe("recordGenAiUsage", () => {
     }
   })
 
+  test("tags counters with agent name when provided", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-usage-metrics-agent-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      recordGenAiUsage({
+        model: "gpt-5.5",
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+        cost: 0.01,
+        agentName: "sisyphus",
+      })
+
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      const lines = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+
+      const byName = Object.fromEntries(lines.map((l) => [l.name, l]))
+      expect(byName["gen_ai.usage.input_tokens"].dataPoints[0].attributes["gen_ai.agent.name"]).toBe("sisyphus")
+      expect(byName["gen_ai.usage.cost"].dataPoints[0].attributes["gen_ai.agent.name"]).toBe("sisyphus")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("omits the agent name attribute when not provided", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-usage-metrics-no-agent-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      recordGenAiUsage({ model: "gpt-5.5", inputTokens: 10, outputTokens: 5, totalTokens: 15 })
+
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      expect(contents).not.toContain("gen_ai.agent.name")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("skips the cost counter when cost is not provided", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gen-ai-usage-metrics-no-cost-test-"))
     try {

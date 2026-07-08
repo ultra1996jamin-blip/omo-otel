@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel, sessionSpanContext } from "@oh-my-opencode/otel-core"
 import { trace } from "@opentelemetry/api"
 
+import { _resetForTesting, setSessionAgent } from "../features/claude-code-session-state"
 import {
   __resetRootRaceRetryDelaysForTesting,
   __setRootRaceRetryDelaysForTesting,
@@ -16,6 +17,7 @@ import {
 describe("recordGenAiCompletionSpan", () => {
   afterEach(() => {
     __resetActiveTracerForTesting()
+    _resetForTesting()
   })
 
   test("does not throw when otel is disabled", async () => {
@@ -104,6 +106,65 @@ describe("recordGenAiCompletionSpan", () => {
         failingClient,
       ),
     ).resolves.toBeUndefined()
+  })
+
+  test("tags the completion span (and usage counters) with the session's active agent name", async () => {
+    // given — a top-level session directly handled by "sisyphus", not a
+    // delegated sub-agent (no agent.execute.* span involved at all). Before
+    // this, only agent.execute.* hand-off spans ever carried gen_ai.agent.name.
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-agent-name-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-agent-tagged"
+      setSessionAgent(sessionID, "sisyphus")
+
+      // when
+      await recordGenAiCompletionSpan(
+        { id: "asst_agent_tagged", modelID: "gpt-5.5", providerID: "opencode", tokens: { input: 5, output: 3 } },
+        sessionID,
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
+      expect(spanLine).toBeDefined()
+      expect(JSON.parse(spanLine!).attributes["gen_ai.agent.name"]).toBe("sisyphus")
+
+      const metricLines = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      const usageLine = metricLines.split("\n").find((line) => line.includes("gen_ai.usage.input_tokens"))
+      expect(usageLine).toBeDefined()
+      expect(JSON.parse(usageLine!).dataPoints[0].attributes["gen_ai.agent.name"]).toBe("sisyphus")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("omits gen_ai.agent.name when the session has no known active agent", async () => {
+    // given — no setSessionAgent() call for this session at all
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-agent-name-missing-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        { id: "asst_agent_unknown", modelID: "gpt-5.5", providerID: "opencode", tokens: { input: 5, output: 3 } },
+        "session-agent-untagged",
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
+      expect(spanLine).toBeDefined()
+      expect(JSON.parse(spanLine!).attributes["gen_ai.agent.name"]).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test("prompt captured at LLM-request time wins over the parentID fallback", async () => {

@@ -1,4 +1,5 @@
 import {
+  GEN_AI_AGENT_NAME,
   __resetPendingBindMaxWaitForTesting,
   __setPendingBindMaxWaitForTesting,
   getPendingBindMaxWaitMs,
@@ -7,6 +8,7 @@ import {
   sessionSpanContext,
 } from "@oh-my-opencode/otel-core"
 import type { Attributes } from "@opentelemetry/api"
+import { getSessionAgent } from "../features/claude-code-session-state"
 import { isRealUserTextPart, stripInternalInitiatorMarkers } from "../shared/internal-initiator-marker"
 import { log } from "../shared/logger"
 import { normalizeSDKResponse } from "../shared/normalize-sdk-response"
@@ -348,6 +350,16 @@ export async function recordGenAiCompletionSpan(
     const response = fetched.response
 
     const totalTokens = inputTokens + outputTokens + (reasoningTokens ?? 0)
+    // Set for BOTH a top-level session (the agent the user directly picked
+    // to chat with, e.g. "sisyphus") and a delegated sub-agent's own session
+    // (e.g. "Sisyphus-Junior") — getSessionAgent() is keyed by sessionID and
+    // updated wherever the active agent for that session changes, so this
+    // works uniformly without needing to special-case delegation here.
+    // Without it, only the agent.execute.* hand-off span carried an agent
+    // identity — the actual gen_ai.completion.* spans (and their token/cost
+    // counters, see recordGenAiUsage below) had none, so Grafana had no way
+    // to break cost/usage down by agent for a session's OWN completions.
+    const agentName = getSessionAgent(sessionID)
     const attributes: Attributes = {
       "gen_ai.operation.name": "chat",
       "gen_ai.system": providerID ?? "unknown",
@@ -355,6 +367,7 @@ export async function recordGenAiCompletionSpan(
       "gen_ai.usage.input_tokens": inputTokens,
       "gen_ai.usage.output_tokens": outputTokens,
       "gen_ai.usage.total_tokens": totalTokens,
+      ...(agentName ? { [GEN_AI_AGENT_NAME]: agentName } : {}),
       ...(cost !== undefined ? { "gen_ai.usage.cost": cost } : {}),
       ...(reasoningTokens !== undefined ? { "gen_ai.usage.reasoning_tokens": reasoningTokens } : {}),
       // A string (not the raw numeric token count) specifically so it can be
@@ -371,7 +384,7 @@ export async function recordGenAiCompletionSpan(
     // counters — spans answer "what happened on this call"; these answer
     // "what's the total/rate over time" for the Cost & Token / KPI
     // dashboards, which query Prometheus rather than scanning ClickHouse.
-    recordGenAiUsage({ model: modelID, inputTokens, outputTokens, totalTokens, cost })
+    recordGenAiUsage({ model: modelID, inputTokens, outputTokens, totalTokens, cost, agentName })
 
     // Awaits the pending-bind marker (set by captureFirstUserPrompt while it
     // waits on a delegated sub-agent's bindRoot) instead of a plain

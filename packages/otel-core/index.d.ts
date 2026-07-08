@@ -131,4 +131,5 @@ export declare function recordGenAiUsage(input: {
   readonly outputTokens: number;
   readonly totalTokens: number;
   readonly cost?: number;
+  readonly agentName?: string;
 }): void;

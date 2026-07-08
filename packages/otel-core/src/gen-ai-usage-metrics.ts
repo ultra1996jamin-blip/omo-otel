@@ -26,9 +26,11 @@ function getCounters(): {
  * gen_ai.completion.* span attributes. Spans answer "what happened on this
  * specific call"; these counters answer "what's the total/rate over time,
  * queryable without scanning ClickHouse" (Cost & Token / KPI dashboards).
- * Attributed by model only (not session/prompt) — those dashboards aggregate
- * across all calls, and per-session labels would blow up cardinality for no
- * dashboard benefit.
+ * Attributed by model (and, when known, agent) — not session/prompt, since
+ * those dashboards aggregate across all calls and per-session labels would
+ * blow up cardinality for no dashboard benefit. Agent name is a small,
+ * bounded set (one label value per configured agent), same reasoning as
+ * gen_ai.reasoning_present, so it's safe to add as a dimension.
  */
 export function recordGenAiUsage(input: {
   readonly model: string
@@ -36,9 +38,13 @@ export function recordGenAiUsage(input: {
   readonly outputTokens: number
   readonly totalTokens: number
   readonly cost?: number
+  readonly agentName?: string
 }): void {
   const counters = getCounters()
-  const attributes = { "gen_ai.request.model": input.model }
+  const attributes = {
+    "gen_ai.request.model": input.model,
+    ...(input.agentName ? { "gen_ai.agent.name": input.agentName } : {}),
+  }
   counters.inputTokens.add(input.inputTokens, attributes)
   counters.outputTokens.add(input.outputTokens, attributes)
   counters.totalTokens.add(input.totalTokens, attributes)
