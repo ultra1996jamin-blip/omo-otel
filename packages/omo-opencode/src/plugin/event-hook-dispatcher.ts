@@ -1,3 +1,4 @@
+import { sessionSpanContext, withSpan } from "@oh-my-opencode/otel-core";
 import type { CreatedHooks } from "../create-hooks";
 import { log } from "../shared/logger";
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../shared/event-session-id";
@@ -21,13 +22,31 @@ export function createEventHookRunner(): EventHookRunner {
   return async (hookName, handler, input): Promise<void> => {
     if (!handler) return;
 
+    const sessionID = getEventSessionID(input);
+    // "opencode.event.*" (not "agent.*"/"hook.execute.*") + event.source
+    // explicitly says "opencode" — these ~30 internal hooks (auto-update
+    // checks, context injectors, compaction, etc.) fire because OpenCode's
+    // own event system dispatched session/message/tool events, not because
+    // an agent decided to act. Keeping that distinct from agent-initiated
+    // tool calls (tool-span-tracker.ts's "{agent}: {tool}" spans) matters
+    // for reading a trace: "did the human/agent do this, or did the host
+    // engine do it on its own".
     try {
-      await Promise.resolve(handler(input));
+      await withSpan(
+        `opencode.event.${hookName}`,
+        {
+          "event.type": input.event.type,
+          "event.source": "opencode",
+        },
+        () => handler(input),
+        undefined,
+        sessionID ? sessionSpanContext.getContext(sessionID) : undefined,
+      );
     } catch (error) {
       log("[event] hook execution failed", {
         hook: hookName,
         eventType: input.event.type,
-        sessionID: getEventSessionID(input),
+        sessionID,
         error: error instanceof Error ? error : String(error),
       });
     }

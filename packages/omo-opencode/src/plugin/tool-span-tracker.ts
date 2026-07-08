@@ -1,4 +1,5 @@
-import { DelegateSpanRegistry, endSpanSafely, sessionSpanContext, startDetachedSpan } from "@oh-my-opencode/otel-core"
+import { DelegateSpanRegistry, GEN_AI_AGENT_NAME, endSpanSafely, sessionSpanContext, startDetachedSpan } from "@oh-my-opencode/otel-core"
+import { getSessionAgent } from "../features/claude-code-session-state"
 import { log } from "../shared/logger"
 import { getMcpServerNameForTool } from "../shared/mcp-tool-classifier"
 import { markSessionUsedSkill } from "../shared/session-skill-usage-state"
@@ -49,18 +50,32 @@ export function createToolSpanTracker() {
         // see SessionSpanContext.getContextAwaitingPendingBind's doc comment.
         const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(input.sessionID)
         const mcpServerName = getMcpServerNameForTool(input.tool)
+        // "{agent}: {tool}" (e.g. "sisyphus: write") reads at a glance in
+        // Jaeger's trace tree/Operation list — which agent did what — instead
+        // of a flat "hook.execute.write" that could belong to any agent.
+        // Falls back to the old "hook.execute.<tool>" shape when the
+        // session's agent isn't known yet (e.g. captured before
+        // setSessionAgent() has ever run for it), so a span is never named
+        // "undefined: write". hook.name (unchanged, always the raw tool
+        // name) is what dashboards/queries key off of — see
+        // omo-observability's dashboards, updated to filter on that
+        // dimension instead of a span-name prefix now that this name is no
+        // longer a stable "hook.execute." prefix.
+        const agentName = getSessionAgent(input.sessionID)
+        const spanName = agentName ? `${agentName}: ${input.tool}` : `hook.execute.${input.tool}`
         // OMO calls this mechanism a "hook" (tool.execute.before/after), not
-        // a "tool" — the span name/attributes follow that vocabulary. Every
-        // tool call (built-in or MCP-provided) shares this one span shape;
-        // mcp.server_name is the only thing that tells the two apart (see
-        // mcp-tool-classifier.ts) — dashboards/queries filter on its presence
-        // rather than on a separate "mcp.*" span name, since MCP calls never
-        // actually produced their own span kind in practice.
+        // a "tool" — the attribute vocabulary follows that (hook.name, not
+        // tool.name). Every tool call (built-in or MCP-provided) shares this
+        // one span shape; mcp.server_name is the only thing that tells the
+        // two apart (see mcp-tool-classifier.ts) — dashboards/queries filter
+        // on its presence rather than on a separate "mcp.*" span name, since
+        // MCP calls never actually produced their own span kind in practice.
         const span = startDetachedSpan(
-          `hook.execute.${input.tool}`,
+          spanName,
           {
             "hook.name": input.tool,
             "hook.input.summary": summarizeArgs(input.args),
+            ...(agentName ? { [GEN_AI_AGENT_NAME]: agentName } : {}),
             ...(mcpServerName ? { "mcp.server_name": mcpServerName } : {}),
           },
           parentContext,
