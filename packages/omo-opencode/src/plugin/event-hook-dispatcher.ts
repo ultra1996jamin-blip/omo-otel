@@ -31,6 +31,21 @@ export function createEventHookRunner(): EventHookRunner {
     // tool calls (tool-span-tracker.ts's "{agent}: {tool}" spans) matters
     // for reading a trace: "did the human/agent do this, or did the host
     // engine do it on its own".
+    //
+    // sessionSpanContext.getContext() auto-vivifies a generic "session.turn"
+    // root if none exists yet for this session — fine for a span that KNOWS
+    // it's the first thing to touch this session, but these ~30 hooks fire
+    // on nearly every event, often before captureFirstUserPrompt/
+    // recordGenAiCompletionSpan (event.ts) get a chance to establish the
+    // real "user.prompt"/"agent.execute.*" root. Racing ahead of them here
+    // was observed live to eagerly stamp the generic root first, silently
+    // demoting or dropping the actual user-turn root entirely. hasRoot() is
+    // a pure peek (see its own doc comment) — only attach under a root that
+    // ALREADY exists; if none does yet, this span is parentless rather than
+    // corrupting the session's real root.
+    const parentContext = sessionID && sessionSpanContext.hasRoot(sessionID)
+      ? sessionSpanContext.getContext(sessionID)
+      : undefined;
     try {
       await withSpan(
         `opencode.event.${hookName}`,
@@ -40,7 +55,7 @@ export function createEventHookRunner(): EventHookRunner {
         },
         () => handler(input),
         undefined,
-        sessionID ? sessionSpanContext.getContext(sessionID) : undefined,
+        parentContext,
       );
     } catch (error) {
       log("[event] hook execution failed", {
