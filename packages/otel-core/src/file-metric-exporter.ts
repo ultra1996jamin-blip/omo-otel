@@ -5,11 +5,11 @@ import { DataPointType, type PushMetricExporter, type ResourceMetrics } from "@o
 import type { OtelDiagnostics } from "./types"
 
 function serializeMetric(metric: import("@opentelemetry/sdk-metrics").MetricData): Record<string, unknown> | undefined {
-  if (metric.dataPointType !== DataPointType.SUM) return undefined
+  if (metric.dataPointType !== DataPointType.SUM && metric.dataPointType !== DataPointType.GAUGE) return undefined
   return {
     name: metric.descriptor.name,
     unit: metric.descriptor.unit,
-    isMonotonic: metric.isMonotonic,
+    ...(metric.dataPointType === DataPointType.SUM ? { isMonotonic: metric.isMonotonic } : {}),
     dataPoints: metric.dataPoints.map((point) => ({
       attributes: point.attributes,
       startTimeUnixMicro: hrTimeToMicroseconds(point.startTime),

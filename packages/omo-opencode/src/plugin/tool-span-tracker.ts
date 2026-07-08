@@ -1,6 +1,8 @@
 import { DelegateSpanRegistry, endSpanSafely, sessionSpanContext, startDetachedSpan } from "@oh-my-opencode/otel-core"
 import { log } from "../shared/logger"
 import { getMcpServerNameForTool } from "../shared/mcp-tool-classifier"
+import { markSessionUsedSkill } from "../shared/session-skill-usage-state"
+import { TOOL_NAME as SKILL_TOOL_NAME } from "../tools/skill/constants"
 
 export type ToolSpanTracker = ReturnType<typeof createToolSpanTracker>
 
@@ -34,6 +36,13 @@ export function createToolSpanTracker() {
     async start(input: ToolSpanIdentity & { args?: Record<string, unknown> }): Promise<void> {
       const key = spanKey(input)
       startedAtMs.set(key, Date.now())
+      // Recorded regardless of the span/otel-enabled state below — this is
+      // plain in-memory bookkeeping read later by gen-ai-completion-span.ts
+      // to tag context-usage metrics with gen_ai.skill_used for the
+      // with-vs-without-skills A/B comparison in Grafana.
+      if (input.tool === SKILL_TOOL_NAME) {
+        markSessionUsedSkill(input.sessionID)
+      }
       try {
         // Waits out any in-flight bindRoot() for a delegated sub-agent
         // session before falling back to auto-vivifying a generic root —

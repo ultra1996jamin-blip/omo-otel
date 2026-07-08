@@ -3,15 +3,19 @@ import {
   __resetPendingBindMaxWaitForTesting,
   __setPendingBindMaxWaitForTesting,
   getPendingBindMaxWaitMs,
+  recordGenAiContextUsage,
   recordGenAiUsage,
   resolveTracer,
   sessionSpanContext,
 } from "@oh-my-opencode/otel-core"
 import type { Attributes } from "@opentelemetry/api"
 import { getSessionAgent } from "../features/claude-code-session-state"
+import { resolveActualContextLimit } from "../shared/context-limit-resolver"
 import { isRealUserTextPart, stripInternalInitiatorMarkers } from "../shared/internal-initiator-marker"
 import { log } from "../shared/logger"
+import { getModelCacheState } from "../shared/model-context-limits-cache"
 import { normalizeSDKResponse } from "../shared/normalize-sdk-response"
+import { hasSessionUsedSkill } from "../shared/session-skill-usage-state"
 
 const MAX_TRACKED_MESSAGE_IDS = 5000
 const recordedMessageIds = new Set<string>()
@@ -360,6 +364,26 @@ export async function recordGenAiCompletionSpan(
     // counters, see recordGenAiUsage below) had none, so Grafana had no way
     // to break cost/usage down by agent for a session's OWN completions.
     const agentName = getSessionAgent(sessionID)
+    // Same string-boolean convention as gen_ai.reasoning_present below — lets
+    // Grafana compare context growth/cost with vs. without skill usage
+    // (an A/B-style question) via a low-cardinality dimension instead of a
+    // per-skill-name label, which would blow up cardinality for little gain.
+    const skillUsed = hasSessionUsedSkill(sessionID)
+    // How full is the model's context window after this turn. input+output
+    // (not totalTokens, which also folds in reasoning tokens that don't
+    // necessarily persist into the next turn's context) mirrors the
+    // usedTokens formula context-window-usage.ts uses for the same "is this
+    // session close to its limit" question (that one also adds cache.read,
+    // which isn't available on this event's tokens shape). Resolving via the
+    // shared model-context-limits-cache mirror (see its own doc comment) —
+    // null for an unrecognized provider/model pair, in which case the
+    // context.* attributes/gauge are skipped entirely (AS-01 graceful
+    // degradation): a ratio against an unknown denominator isn't meaningful.
+    const contextLimit = providerID
+      ? resolveActualContextLimit(providerID, modelID, getModelCacheState())
+      : null
+    const contextUsedTokens = inputTokens + outputTokens
+    const contextUsageRatio = contextLimit ? contextUsedTokens / contextLimit : undefined
     const attributes: Attributes = {
       "gen_ai.operation.name": "chat",
       "gen_ai.system": providerID ?? "unknown",
@@ -376,6 +400,14 @@ export async function recordGenAiCompletionSpan(
       // needs a boolean-ish label to filter/group by, not a high-cardinality
       // number.
       "gen_ai.reasoning_present": reasoningTokens !== undefined && reasoningTokens > 0 ? "true" : "false",
+      "gen_ai.skill_used": skillUsed ? "true" : "false",
+      ...(contextLimit
+        ? {
+            "gen_ai.context.limit": contextLimit,
+            "gen_ai.context.used_tokens": contextUsedTokens,
+            "gen_ai.context.usage_ratio": contextUsageRatio as number,
+          }
+        : {}),
       ...(prompt ? { "gen_ai.prompt": prompt } : {}),
       ...(response ? { "gen_ai.completion": response } : {}),
     }
@@ -385,6 +417,17 @@ export async function recordGenAiCompletionSpan(
     // "what's the total/rate over time" for the Cost & Token / KPI
     // dashboards, which query Prometheus rather than scanning ClickHouse.
     recordGenAiUsage({ model: modelID, inputTokens, outputTokens, totalTokens, cost, agentName })
+    if (contextLimit && contextUsageRatio !== undefined) {
+      recordGenAiContextUsage({
+        model: modelID,
+        usageRatio: contextUsageRatio,
+        usedTokens: contextUsedTokens,
+        limit: contextLimit,
+        system: providerID,
+        agentName,
+        skillUsed,
+      })
+    }
 
     // Awaits the pending-bind marker (set by captureFirstUserPrompt while it
     // waits on a delegated sub-agent's bindRoot) instead of a plain

@@ -7,6 +7,12 @@ import { trace } from "@opentelemetry/api"
 
 import { _resetForTesting, setSessionAgent } from "../features/claude-code-session-state"
 import {
+  clearModelContextLimitsCache,
+  setAnthropicContext1MEnabled,
+  setModelContextLimitsCache,
+} from "../shared/model-context-limits-cache"
+import { clearAllSessionSkillUsage, markSessionUsedSkill } from "../shared/session-skill-usage-state"
+import {
   __resetRootRaceRetryDelaysForTesting,
   __setRootRaceRetryDelaysForTesting,
   captureFirstUserPrompt,
@@ -18,6 +24,8 @@ describe("recordGenAiCompletionSpan", () => {
   afterEach(() => {
     __resetActiveTracerForTesting()
     _resetForTesting()
+    clearModelContextLimitsCache()
+    clearAllSessionSkillUsage()
   })
 
   test("does not throw when otel is disabled", async () => {
@@ -162,6 +170,165 @@ describe("recordGenAiCompletionSpan", () => {
       const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
       expect(spanLine).toBeDefined()
       expect(JSON.parse(spanLine!).attributes["gen_ai.agent.name"]).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("tags the completion span and context-usage gauge with resolved context limit, and gen_ai.skill_used when a skill was used this session", async () => {
+    // given — anthropic resolves its default 200k limit without needing the
+    // model-context-limits-cache mirror at all (resolveActualContextLimit's
+    // own hard-coded logic), so this exercises the simplest resolvable case.
+    // claude-haiku-4-5 deliberately does NOT match resolveActualContextLimit's
+    // GA-1M-context regex (opus/sonnet-4-(6|7|8), fable/mythos-5) — picked so
+    // this test actually exercises the DEFAULT (200k) branch.
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-span-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-context-usage"
+      markSessionUsedSkill(sessionID)
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_context_usage",
+          modelID: "claude-haiku-4-5",
+          providerID: "anthropic",
+          tokens: { input: 80_000, output: 20_000 },
+        },
+        sessionID,
+      )
+      await handle.shutdown()
+
+      // then — span attributes
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.claude-haiku-4-5"))
+      expect(spanLine).toBeDefined()
+      const attrs = JSON.parse(spanLine!).attributes
+      expect(attrs["gen_ai.context.limit"]).toBe(200_000)
+      expect(attrs["gen_ai.context.used_tokens"]).toBe(100_000)
+      expect(attrs["gen_ai.context.usage_ratio"]).toBeCloseTo(0.5)
+      expect(attrs["gen_ai.skill_used"]).toBe("true")
+
+      // then — context-usage gauge metric
+      const metricLines = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      const gauge = metricLines
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+        .find((m) => m.name === "gen_ai.context.usage_ratio")
+      expect(gauge).toBeDefined()
+      expect(gauge.dataPoints[0].value).toBeCloseTo(0.5)
+      expect(gauge.dataPoints[0].attributes["gen_ai.skill_used"]).toBe("true")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("resolves a non-anthropic model's context limit via the model-context-limits-cache mirror", async () => {
+    // given — mirrors what provider-config-handler.ts populates from
+    // OpenCode's provider config for a model resolveActualContextLimit has
+    // no hard-coded knowledge of.
+    setModelContextLimitsCache(new Map([["opencode/kimi-k2.5-free", 262_144]]))
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-cached-model-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_cached_model",
+          modelID: "kimi-k2.5-free",
+          providerID: "opencode",
+          tokens: { input: 26_214, output: 0 },
+        },
+        "session-cached-model",
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.kimi-k2.5-free"))
+      expect(spanLine).toBeDefined()
+      const attrs = JSON.parse(spanLine!).attributes
+      expect(attrs["gen_ai.context.limit"]).toBe(262_144)
+      expect(attrs["gen_ai.context.usage_ratio"]).toBeCloseTo(0.1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("skips context.* attributes and the gauge, but still tags gen_ai.skill_used=false, for an unresolvable model", async () => {
+    // given — no cache entry and not an anthropic model, so
+    // resolveActualContextLimit returns null; the skill tool was never
+    // invoked this session either.
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-unresolvable-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_unresolvable_model",
+          modelID: "some-unknown-model",
+          providerID: "some-unknown-provider",
+          tokens: { input: 10, output: 5 },
+        },
+        "session-unresolvable-model",
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.some-unknown-model"))
+      expect(spanLine).toBeDefined()
+      const attrs = JSON.parse(spanLine!).attributes
+      expect(attrs["gen_ai.context.limit"]).toBeUndefined()
+      expect(attrs["gen_ai.context.used_tokens"]).toBeUndefined()
+      expect(attrs["gen_ai.context.usage_ratio"]).toBeUndefined()
+      expect(attrs["gen_ai.skill_used"]).toBe("false")
+
+      const metricLines = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      expect(metricLines).not.toContain("gen_ai.context.usage_ratio")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("resolves the anthropic 1M context limit when the cache mirror says it's enabled", async () => {
+    // given — claude-haiku-4-5 does NOT match the GA-1M regex on its own
+    // (see the earlier test's comment), so getting 1M here only happens
+    // because of the anthropicContext1MEnabled flag, not the model itself.
+    setAnthropicContext1MEnabled(true)
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-1m-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_1m_context",
+          modelID: "claude-haiku-4-5",
+          providerID: "anthropic",
+          tokens: { input: 500_000, output: 0 },
+        },
+        "session-1m-context",
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = traceLines.split("\n").find((line) => line.includes("gen_ai.completion.claude-haiku-4-5"))
+      expect(spanLine).toBeDefined()
+      expect(JSON.parse(spanLine!).attributes["gen_ai.context.limit"]).toBe(1_000_000)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

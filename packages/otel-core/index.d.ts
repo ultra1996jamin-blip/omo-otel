@@ -133,3 +133,13 @@ export declare function recordGenAiUsage(input: {
   readonly cost?: number;
   readonly agentName?: string;
 }): void;
+
+export declare function recordGenAiContextUsage(input: {
+  readonly model: string;
+  readonly usageRatio: number;
+  readonly usedTokens: number;
+  readonly limit: number;
+  readonly system?: string;
+  readonly agentName?: string;
+  readonly skillUsed?: boolean;
+}): void;

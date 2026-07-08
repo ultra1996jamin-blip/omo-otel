@@ -21,33 +21,48 @@ function encodeAttributes(attributes: Record<string, unknown> | undefined): { ke
 }
 
 /**
- * Only Sum (Counter/UpDownCounter) metrics are encoded — the only instrument
- * kind this project currently emits (token/cost usage counters, see
- * gen-ai-usage-metrics.ts). Histogram/Gauge/ExponentialHistogram data points
- * are silently skipped rather than throwing, so adding a new instrument kind
- * later degrades gracefully instead of breaking export entirely.
+ * Sum (Counter/UpDownCounter) and Gauge metrics are encoded — Sum for
+ * cumulative token/cost usage counters (gen-ai-usage-metrics.ts), Gauge for
+ * point-in-time values like context window usage ratio (see
+ * gen-ai-context-usage-metrics.ts), which don't make sense as a running sum.
+ * Histogram/ExponentialHistogram data points are silently skipped rather
+ * than throwing, so adding a new instrument kind later degrades gracefully
+ * instead of breaking export entirely.
  */
 class UnsupportedInstrumentSkippedError extends Error {}
 
+function encodeDataPoints(dataPoints: readonly import("@opentelemetry/sdk-metrics").DataPoint<number>[]) {
+  return dataPoints.map((point) => ({
+    attributes: encodeAttributes(point.attributes),
+    startTimeUnixNano: String(hrTimeToNanoseconds(point.startTime)),
+    timeUnixNano: String(hrTimeToNanoseconds(point.endTime)),
+    ...(Number.isInteger(point.value) ? { asInt: String(point.value) } : { asDouble: point.value }),
+  }))
+}
+
 function encodeMetric(metric: import("@opentelemetry/sdk-metrics").MetricData): Record<string, unknown> {
-  if (metric.dataPointType !== DataPointType.SUM) {
-    throw new UnsupportedInstrumentSkippedError(`unsupported instrument for OTLP export: ${metric.dataPointType}`)
-  }
-  return {
+  const base = {
     name: metric.descriptor.name,
     description: metric.descriptor.description,
     unit: metric.descriptor.unit,
-    sum: {
-      dataPoints: metric.dataPoints.map((point) => ({
-        attributes: encodeAttributes(point.attributes),
-        startTimeUnixNano: String(hrTimeToNanoseconds(point.startTime)),
-        timeUnixNano: String(hrTimeToNanoseconds(point.endTime)),
-        ...(Number.isInteger(point.value) ? { asInt: String(point.value) } : { asDouble: point.value }),
-      })),
-      aggregationTemporality: 2, // AGGREGATION_TEMPORALITY_CUMULATIVE
-      isMonotonic: metric.isMonotonic,
-    },
   }
+  if (metric.dataPointType === DataPointType.SUM) {
+    return {
+      ...base,
+      sum: {
+        dataPoints: encodeDataPoints(metric.dataPoints),
+        aggregationTemporality: 2, // AGGREGATION_TEMPORALITY_CUMULATIVE
+        isMonotonic: metric.isMonotonic,
+      },
+    }
+  }
+  if (metric.dataPointType === DataPointType.GAUGE) {
+    return {
+      ...base,
+      gauge: { dataPoints: encodeDataPoints(metric.dataPoints) },
+    }
+  }
+  throw new UnsupportedInstrumentSkippedError(`unsupported instrument for OTLP export: ${metric.dataPointType}`)
 }
 
 /**

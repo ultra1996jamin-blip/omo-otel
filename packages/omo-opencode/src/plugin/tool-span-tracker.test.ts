@@ -5,11 +5,13 @@ import { join } from "node:path"
 import { __resetActiveTracerForTesting, initializeOtel } from "@oh-my-opencode/otel-core"
 
 import { __resetKnownMcpServerNamesForTesting, setKnownMcpServerNames } from "../shared/mcp-tool-classifier"
+import { clearAllSessionSkillUsage, hasSessionUsedSkill } from "../shared/session-skill-usage-state"
 import { createToolSpanTracker } from "./tool-span-tracker"
 
 describe("createToolSpanTracker", () => {
   afterEach(() => {
     __resetActiveTracerForTesting()
+    clearAllSessionSkillUsage()
   })
 
   test("start/end does not throw when otel is disabled (default no-op tracer)", () => {
@@ -105,6 +107,26 @@ describe("createToolSpanTracker", () => {
       __resetKnownMcpServerNamesForTesting()
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  test("marks the session as having used skill when the skill tool is invoked", async () => {
+    const tracker = createToolSpanTracker()
+    const identity = { tool: "skill", sessionID: "session-skill-used", callID: "call-skill" }
+
+    await tracker.start(identity)
+    tracker.end(identity)
+
+    expect(hasSessionUsedSkill("session-skill-used")).toBe(true)
+  })
+
+  test("does not mark skill usage for an unrelated tool", async () => {
+    const tracker = createToolSpanTracker()
+    const identity = { tool: "grep", sessionID: "session-no-skill", callID: "call-no-skill" }
+
+    await tracker.start(identity)
+    tracker.end(identity)
+
+    expect(hasSessionUsedSkill("session-no-skill")).toBe(false)
   })
 
   test("does not add mcp.server_name for a built-in tool", async () => {

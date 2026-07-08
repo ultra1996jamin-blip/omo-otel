@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { applyProviderConfig } from "./provider-config-handler"
 import { createModelCacheState } from "../plugin-state"
 import { clearVisionCapableModelsCache, readVisionCapableModelsCache } from "../shared/vision-capable-models-cache"
+import { clearModelContextLimitsCache, getModelCacheState } from "../shared/model-context-limits-cache"
 
 describe("applyProviderConfig", () => {
   test("clears stale model context limits when provider config changes", () => {
@@ -44,6 +45,29 @@ describe("applyProviderConfig", () => {
     expect(Array.from(modelCacheState.modelContextLimitsCache.entries())).toEqual([
       ["google/gemini-2.5-pro", 1048576],
     ])
+  })
+
+  test("mirrors model context limits and the anthropic 1M flag into the shared cache", () => {
+    // given — this is what gen-ai-completion-span.ts reads to resolve context
+    // limits for the OTEL context-usage gauge, since it has no access to the
+    // ModelCacheState instance threaded through the hook call chains.
+    const modelCacheState = createModelCacheState()
+
+    // when
+    applyProviderConfig({
+      config: {
+        provider: {
+          anthropic: { options: { headers: { "anthropic-beta": "context-1m-2025-08-07" } } },
+          opencode: { models: { "kimi-k2.5-free": { limit: { context: 262144 } } } },
+        },
+      },
+      modelCacheState,
+    })
+
+    // then
+    const mirrored = getModelCacheState()
+    expect(mirrored.modelContextLimitsCache.get("opencode/kimi-k2.5-free")).toBe(262144)
+    expect(mirrored.anthropicContext1MEnabled).toBe(true)
   })
 
   test("caches vision-capable models from modalities and capabilities", () => {
@@ -208,3 +232,4 @@ describe("applyProviderConfig", () => {
 })
 
 clearVisionCapableModelsCache()
+clearModelContextLimitsCache()

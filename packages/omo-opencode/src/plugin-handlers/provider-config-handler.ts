@@ -1,4 +1,8 @@
 import type { ModelCacheState, VisionCapableModel } from "../plugin-state";
+import {
+  setAnthropicContext1MEnabled,
+  setModelContextLimitsCache,
+} from "../shared/model-context-limits-cache"
 import { setVisionCapableModelsCache } from "../shared/vision-capable-models-cache"
 
 type ProviderConfig = {
@@ -46,10 +50,12 @@ export function applyProviderConfig(params: {
   const modelContextLimitsCache = params.modelCacheState.modelContextLimitsCache;
 
   modelContextLimitsCache.clear()
+  setModelContextLimitsCache(modelContextLimitsCache)
 
   const anthropicBeta = providers?.anthropic?.options?.headers?.["anthropic-beta"];
   params.modelCacheState.anthropicContext1MEnabled =
     anthropicBeta?.includes("context-1m") ?? false;
+  setAnthropicContext1MEnabled(params.modelCacheState.anthropicContext1MEnabled);
 
   const visionCapableModelsCache = params.modelCacheState.visionCapableModelsCache
     ?? new Map<string, VisionCapableModel>()
