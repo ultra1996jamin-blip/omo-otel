@@ -595,7 +595,20 @@ export async function captureFirstUserPrompt(
     }
 
     const createdMs = num(info.time?.created)
-    const attributes: Attributes = { "gen_ai.prompt": prompt, "session.id": sessionID }
+    // getSessionAgent() here mainly matters for the isDelegated case
+    // ("agent.prompt"): that's the delegated sub-agent's OWN session, whose
+    // agent name is exactly what a reader wants to see on the prompt that
+    // kicked it off — otherwise this span was the one visible gap where
+    // gen_ai.completion.* (recordGenAiCompletionSpan) and agent.execute.*
+    // both carry it but this sibling span didn't (observed live: every
+    // "agent.prompt" span under a delegated agent.execute.* had an empty
+    // gen_ai.agent.name while its own gen_ai.completion.* children did not).
+    const promptAgentName = getSessionAgent(sessionID)
+    const attributes: Attributes = {
+      "gen_ai.prompt": prompt,
+      "session.id": sessionID,
+      ...(promptAgentName ? { [GEN_AI_AGENT_NAME]: promptAgentName } : {}),
+    }
     // Named by isDelegated/hasRealUserText even in the create-a-new-root
     // case:
     // - isDelegated but bindRoot() never arrived even after the full retry

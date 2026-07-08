@@ -50,19 +50,20 @@ export function createToolSpanTracker() {
         // see SessionSpanContext.getContextAwaitingPendingBind's doc comment.
         const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(input.sessionID)
         const mcpServerName = getMcpServerNameForTool(input.tool)
-        // "{agent}: {tool}" (e.g. "sisyphus: write") reads at a glance in
-        // Jaeger's trace tree/Operation list — which agent did what — instead
-        // of a flat "hook.execute.write" that could belong to any agent.
-        // Falls back to the old "hook.execute.<tool>" shape when the
-        // session's agent isn't known yet (e.g. captured before
-        // setSessionAgent() has ever run for it), so a span is never named
-        // "undefined: write". hook.name (unchanged, always the raw tool
-        // name) is what dashboards/queries key off of — see
-        // omo-observability's dashboards, updated to filter on that
-        // dimension instead of a span-name prefix now that this name is no
-        // longer a stable "hook.execute." prefix.
+        // "{agent}: hook/{tool}" or "{agent}: mcp/{server}/{tool}" reads at a
+        // glance in Jaeger's trace tree/Operation list — which agent did
+        // what, AND whether it was a built-in tool or an MCP call — instead
+        // of a flat "hook.execute.write" that could be either. The hook/mcp
+        // prefixes match the same vocabulary the Grafana dashboards already
+        // use (hook_name/mcp_server_name dimensions), just made visible in
+        // the operation name too. Falls back to the old "hook.execute.<tool>"
+        // shape when the session's agent isn't known yet (e.g. captured
+        // before setSessionAgent() has ever run for it), so a span is never
+        // named "undefined: ...". hook.name (unchanged, always the raw tool
+        // name) is what dashboards/queries key off of, not this display name.
         const agentName = getSessionAgent(input.sessionID)
-        const spanName = agentName ? `${agentName}: ${input.tool}` : `hook.execute.${input.tool}`
+        const operationName = mcpServerName ? `mcp/${mcpServerName}/${input.tool}` : `hook/${input.tool}`
+        const spanName = agentName ? `${agentName}: ${operationName}` : `hook.execute.${input.tool}`
         // OMO calls this mechanism a "hook" (tool.execute.before/after), not
         // a "tool" — the attribute vocabulary follows that (hook.name, not
         // tool.name). Every tool call (built-in or MCP-provided) shares this

@@ -420,6 +420,7 @@ describe("recordGenAiCompletionSpan", () => {
 describe("captureFirstUserPrompt", () => {
   afterEach(() => {
     __resetActiveTracerForTesting()
+    _resetForTesting()
   })
 
   test("does not throw without a client", async () => {
@@ -677,6 +678,45 @@ describe("captureFirstUserPrompt", () => {
       expect(promptSpan).toBeDefined()
       expect(promptSpan.parentSpanId).toBe(agentExecuteSpan.spanContext().spanId)
       expect(promptSpan.traceId).toBe(agentExecuteSpan.spanContext().traceId)
+    } finally {
+      __resetRootRaceRetryDelaysForTesting()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("tags a delegated sub-agent's agent.prompt span with gen_ai.agent.name (regression: was empty even though the sub-agent's own gen_ai.completion.* spans had it)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agent-prompt-agent-name-test-"))
+    try {
+      __setRootRaceRetryDelaysForTesting(5_000)
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-sub-agent-tagged"
+      setSessionAgent(sessionID, "explore")
+      const client = {
+        session: {
+          messages: async () => [{ id: "user_race_tagged", parts: [{ type: "text", text: "Test the explore agent." }] }],
+          get: async () => ({ data: { parentID: "session-orchestrator" } }),
+        },
+      }
+      const agentExecuteSpan = trace.getTracer("test").startSpan("agent.execute.explore")
+
+      // when
+      const capturePromise = captureFirstUserPrompt({ id: "user_race_tagged" }, sessionID, client)
+      setTimeout(() => sessionSpanContext.bindRoot(sessionID, agentExecuteSpan), 15)
+      await capturePromise
+      agentExecuteSpan.end()
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const promptSpan = spans.find((s) => s.name === "agent.prompt")
+      expect(promptSpan).toBeDefined()
+      expect(promptSpan.attributes["gen_ai.agent.name"]).toBe("explore")
     } finally {
       __resetRootRaceRetryDelaysForTesting()
       rmSync(dir, { recursive: true, force: true })

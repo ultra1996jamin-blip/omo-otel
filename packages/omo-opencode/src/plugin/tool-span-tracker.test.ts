@@ -131,7 +131,7 @@ describe("createToolSpanTracker", () => {
     expect(hasSessionUsedSkill("session-no-skill")).toBe(false)
   })
 
-  test("names the span '{agent}: {tool}' and tags gen_ai.agent.name when the session's active agent is known", async () => {
+  test("names the span '{agent}: hook/{tool}' and tags gen_ai.agent.name when the session's active agent is known", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-agent-name-test-"))
     try {
       const handle = initializeOtel({
@@ -151,13 +151,45 @@ describe("createToolSpanTracker", () => {
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line))
-      const hookSpan = spans.find((s) => s.name === "sisyphus: write")
+      const hookSpan = spans.find((s) => s.name === "sisyphus: hook/write")
       expect(hookSpan).toBeDefined()
       // hook.name stays the raw tool name regardless of the span's display
       // name — this is what dashboards/queries key off of.
       expect(hookSpan.attributes["hook.name"]).toBe("write")
       expect(hookSpan.attributes["gen_ai.agent.name"]).toBe("sisyphus")
     } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("names an MCP tool's span '{agent}: mcp/{server}/{tool}' when the session's active agent is known", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-agent-mcp-name-test-"))
+    try {
+      setKnownMcpServerNames(["context7"])
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-hook-agent-mcp-named"
+      setSessionAgent(sessionID, "explore")
+      const tracker = createToolSpanTracker()
+      const identity = { tool: "context7_resolve-library-id", sessionID, callID: "call-agent-mcp-named" }
+
+      await tracker.start(identity)
+      tracker.end(identity)
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      const hookSpan = spans.find((s) => s.name === "explore: mcp/context7/context7_resolve-library-id")
+      expect(hookSpan).toBeDefined()
+      expect(hookSpan.attributes["hook.name"]).toBe("context7_resolve-library-id")
+      expect(hookSpan.attributes["gen_ai.agent.name"]).toBe("explore")
+      expect(hookSpan.attributes["mcp.server_name"]).toBe("context7")
+    } finally {
+      __resetKnownMcpServerNamesForTesting()
       rmSync(dir, { recursive: true, force: true })
     }
   })
