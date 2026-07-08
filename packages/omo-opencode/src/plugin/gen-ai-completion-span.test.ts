@@ -290,10 +290,13 @@ describe("recordGenAiCompletionSpan", () => {
     }
   })
 
-  test("skips context.* attributes and the gauge, but still tags gen_ai.skill_used=false, for an unresolvable model", async () => {
+  test("skips context.limit/usage_ratio (but still records used_tokens) for an unresolvable model, and still tags gen_ai.skill_used=false", async () => {
     // given — no cache entry and not an anthropic model, so
     // resolveActualContextLimit returns null; the skill tool was never
-    // invoked this session either.
+    // invoked this session either. used_tokens is recorded regardless (see
+    // recordGenAiContextUsage's doc comment) — it's exactly what a Grafana
+    // "$context_limit" dashboard variable needs for a model this project
+    // can't resolve a limit for on its own.
     const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-unresolvable-test-"))
     try {
       const handle = initializeOtel({
@@ -318,12 +321,13 @@ describe("recordGenAiCompletionSpan", () => {
       expect(spanLine).toBeDefined()
       const attrs = JSON.parse(spanLine!).attributes
       expect(attrs["gen_ai.context.limit"]).toBeUndefined()
-      expect(attrs["gen_ai.context.used_tokens"]).toBeUndefined()
+      expect(attrs["gen_ai.context.used_tokens"]).toBe(15)
       expect(attrs["gen_ai.context.usage_ratio"]).toBeUndefined()
       expect(attrs["gen_ai.skill_used"]).toBe("false")
 
       const metricLines = readFileSync(join(dir, "metrics.jsonl"), "utf8")
       expect(metricLines).not.toContain("gen_ai.context.usage_ratio")
+      expect(metricLines).toContain("gen_ai.context.used_tokens")
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

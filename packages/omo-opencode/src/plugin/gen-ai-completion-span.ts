@@ -374,11 +374,16 @@ export async function recordGenAiCompletionSpan(
     // necessarily persist into the next turn's context) mirrors the
     // usedTokens formula context-window-usage.ts uses for the same "is this
     // session close to its limit" question (that one also adds cache.read,
-    // which isn't available on this event's tokens shape). Resolving via the
-    // shared model-context-limits-cache mirror (see its own doc comment) —
-    // null for an unrecognized provider/model pair, in which case the
-    // context.* attributes/gauge are skipped entirely (AS-01 graceful
-    // degradation): a ratio against an unknown denominator isn't meaningful.
+    // which isn't available on this event's tokens shape). contextLimit
+    // resolves via the shared model-context-limits-cache mirror (see its own
+    // doc comment) — null for an unrecognized provider/model pair (observed
+    // live: a corporate "codemate/CodeLLMPro" proxy provider that neither
+    // this project nor OpenCode itself has any metadata for). used_tokens is
+    // recorded either way — the limit/ratio attributes are the only thing
+    // gated on actually resolving a limit — so a Grafana dashboard can still
+    // compute usage against an operator-entered "$context_limit" variable
+    // for models this project can't look up on its own, instead of the
+    // metric being useless for exactly the models most likely to need it.
     const contextLimit = providerID
       ? resolveActualContextLimit(providerID, modelID, getModelCacheState())
       : null
@@ -401,10 +406,10 @@ export async function recordGenAiCompletionSpan(
       // number.
       "gen_ai.reasoning_present": reasoningTokens !== undefined && reasoningTokens > 0 ? "true" : "false",
       "gen_ai.skill_used": skillUsed ? "true" : "false",
+      "gen_ai.context.used_tokens": contextUsedTokens,
       ...(contextLimit
         ? {
             "gen_ai.context.limit": contextLimit,
-            "gen_ai.context.used_tokens": contextUsedTokens,
             "gen_ai.context.usage_ratio": contextUsageRatio as number,
           }
         : {}),
@@ -417,17 +422,18 @@ export async function recordGenAiCompletionSpan(
     // "what's the total/rate over time" for the Cost & Token / KPI
     // dashboards, which query Prometheus rather than scanning ClickHouse.
     recordGenAiUsage({ model: modelID, inputTokens, outputTokens, totalTokens, cost, agentName })
-    if (contextLimit && contextUsageRatio !== undefined) {
-      recordGenAiContextUsage({
-        model: modelID,
-        usageRatio: contextUsageRatio,
-        usedTokens: contextUsedTokens,
-        limit: contextLimit,
-        system: providerID,
-        agentName,
-        skillUsed,
-      })
-    }
+    // Recorded unconditionally (used_tokens has no unresolved-limit gate) —
+    // see the attributes block above and recordGenAiContextUsage's own doc
+    // comment for why: a model this project can't resolve a limit for is
+    // exactly the case a Grafana "$context_limit" variable exists to cover.
+    recordGenAiContextUsage({
+      model: modelID,
+      usedTokens: contextUsedTokens,
+      ...(contextLimit ? { usageRatio: contextUsageRatio, limit: contextLimit } : {}),
+      system: providerID,
+      agentName,
+      skillUsed,
+    })
 
     // Awaits the pending-bind marker (set by captureFirstUserPrompt while it
     // waits on a delegated sub-agent's bindRoot) instead of a plain

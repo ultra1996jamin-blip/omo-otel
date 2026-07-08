@@ -56,6 +56,37 @@ describe("recordGenAiContextUsage", () => {
     }
   })
 
+  test("records used_tokens even when the limit/ratio couldn't be resolved, but omits the ratio gauge", async () => {
+    // given — e.g. a custom/proxy provider this project has no context-limit
+    // metadata for at all. This is exactly the case a Grafana "$context_limit"
+    // dashboard variable exists to cover: used_tokens still gets recorded so
+    // the operator can compute usage against their own manually-entered limit.
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-no-limit-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      recordGenAiContextUsage({ model: "CodeLLMPro", usedTokens: 42_000, system: "codemate" })
+
+      await handle.shutdown()
+
+      const contents = readFileSync(join(dir, "metrics.jsonl"), "utf8")
+      const lines = contents
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+
+      const usedTokensGauge = lines.find((l) => l.name === "gen_ai.context.used_tokens")
+      expect(usedTokensGauge).toBeDefined()
+      expect(usedTokensGauge.dataPoints[0].value).toBe(42_000)
+      expect(usedTokensGauge.dataPoints[0].attributes["gen_ai.system"]).toBe("codemate")
+      expect(lines.find((l) => l.name === "gen_ai.context.usage_ratio")).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("omits optional attributes when not provided", async () => {
     const dir = mkdtempSync(join(tmpdir(), "gen-ai-context-usage-minimal-test-"))
     try {
