@@ -1,6 +1,6 @@
 {
 	"name": "omo",
-	"version": "4.15.1-otel.6",
+	"version": "4.15.1-otel.7",
 	"description": "One Codex plugin namespace for Yeongyu's local Codex components.",
 	"author": {
 		"name": "Yeongyu Kim",

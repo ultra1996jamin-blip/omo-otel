@@ -53,4 +53,5 @@ export type EventHookRunner = (
   hookName: string,
   handler: ((input: EventInput) => unknown | Promise<unknown>) | null | undefined,
   input: EventInput,
+  options?: { traced?: boolean },
 ) => Promise<void>;
