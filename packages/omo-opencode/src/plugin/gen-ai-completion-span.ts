@@ -624,7 +624,14 @@ export async function captureFirstUserPrompt(
     //   notification became a brand-new root literally named "user.prompt"
     //   with that synthetic text as its prompt, indistinguishable in Jaeger
     //   from something the human actually typed.
-    const rootName = isDelegated ? "agent.prompt" : hasRealUserText ? "user.prompt" : "session.turn"
+    const baseRootName = isDelegated ? "agent.prompt" : hasRealUserText ? "user.prompt" : "session.turn"
+    // "{agent}: agent.prompt"/"{agent}: user.prompt" so the agent is visible
+    // directly in Jaeger's trace tree/Operation list without clicking into
+    // Tags — matches tool-span-tracker.ts's "{agent}: hook/{tool}" (observed
+    // live: agent.prompt was the one root/prompt span still showing bare,
+    // even though its gen_ai.agent.name Tag was already correct). Falls back
+    // to the plain name when the agent isn't known yet, same as hook spans.
+    const rootName = promptAgentName ? `${promptAgentName}: ${baseRootName}` : baseRootName
     const { context: parentContext, created } = sessionSpanContext.getOrCreateNamedRootContext(
       sessionID,
       rootName,
@@ -635,7 +642,7 @@ export async function captureFirstUserPrompt(
     if (created) {
       // This call established the root — the session's true first message,
       // the start of a brand-new per-turn trace (the release above just
-      // cleared the previous turn's root), or (rootName === "agent.prompt")
+      // cleared the previous turn's root), or (baseRootName === "agent.prompt")
       // a delegated sub-agent whose bindRoot() never arrived within the
       // retry window. It already IS the stamp with the prompt attribute
       // attached, so there's nothing further to record.

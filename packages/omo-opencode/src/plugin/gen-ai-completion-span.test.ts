@@ -714,7 +714,11 @@ describe("captureFirstUserPrompt", () => {
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line))
-      const promptSpan = spans.find((s) => s.name === "agent.prompt")
+      // then — the span NAME itself carries the agent too (not just the
+      // Tag), matching tool-span-tracker.ts's "{agent}: hook/{tool}" — a
+      // reader shouldn't have to click into a span just to see which agent
+      // it belongs to.
+      const promptSpan = spans.find((s) => s.name === "explore: agent.prompt")
       expect(promptSpan).toBeDefined()
       expect(promptSpan.attributes["gen_ai.agent.name"]).toBe("explore")
     } finally {
