@@ -435,8 +435,15 @@ export async function recordGenAiCompletionSpan(
     // fire-and-forget from event.ts (`void recordGenAiCompletionSpan(...)`),
     // so there's no tool-execution latency to protect.
     const parentContext = await sessionSpanContext.getContextAwaitingPendingBind(sessionID)
+    // "{agent}.gen_ai.completion.{model}" — same dot-joined agent prefix as
+    // tool-span-tracker.ts/the user.prompt|agent.prompt roots, so which
+    // agent made this LLM call is visible in Jaeger's Operation list without
+    // clicking into Tags (gen_ai.agent.name was already correct there; only
+    // the span name itself was still bare). Falls back to the plain name
+    // when the agent isn't known yet.
+    const completionSpanName = agentName ? `${agentName}.gen_ai.completion.${modelID}` : `gen_ai.completion.${modelID}`
     const span = resolveTracer().startSpan(
-      `gen_ai.completion.${modelID}`,
+      completionSpanName,
       { attributes, ...(createdMs !== undefined ? { startTime: createdMs } : {}) },
       parentContext,
     )
@@ -625,13 +632,16 @@ export async function captureFirstUserPrompt(
     //   with that synthetic text as its prompt, indistinguishable in Jaeger
     //   from something the human actually typed.
     const baseRootName = isDelegated ? "agent.prompt" : hasRealUserText ? "user.prompt" : "session.turn"
-    // "{agent}: agent.prompt"/"{agent}: user.prompt" so the agent is visible
-    // directly in Jaeger's trace tree/Operation list without clicking into
-    // Tags — matches tool-span-tracker.ts's "{agent}: hook/{tool}" (observed
-    // live: agent.prompt was the one root/prompt span still showing bare,
-    // even though its gen_ai.agent.name Tag was already correct). Falls back
-    // to the plain name when the agent isn't known yet, same as hook spans.
-    const rootName = promptAgentName ? `${promptAgentName}: ${baseRootName}` : baseRootName
+    // "{agent}.agent.prompt"/"{agent}.user.prompt" — dot-joined so the agent
+    // is visible directly in Jaeger's trace tree/Operation list without
+    // clicking into Tags, and so it matches this codebase's existing
+    // dot-namespaced span-naming convention (gen_ai.completion.<model>,
+    // agent.execute.<name>) instead of a "{agent}: ..." colon-space style —
+    // same as tool-span-tracker.ts's "{agent}.hook.{tool}" (observed live:
+    // agent.prompt was the one root/prompt span still showing bare, even
+    // though its gen_ai.agent.name Tag was already correct). Falls back to
+    // the plain name when the agent isn't known yet, same as hook spans.
+    const rootName = promptAgentName ? `${promptAgentName}.${baseRootName}` : baseRootName
     const { context: parentContext, created } = sessionSpanContext.getOrCreateNamedRootContext(
       sessionID,
       rootName,

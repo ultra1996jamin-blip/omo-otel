@@ -150,6 +150,34 @@ describe("recordGenAiCompletionSpan", () => {
     }
   })
 
+  test("names the completion span '{agent}.gen_ai.completion.{model}' when the session's active agent is known", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-completion-name-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+      const sessionID = "session-completion-name-tagged"
+      setSessionAgent(sessionID, "sisyphus")
+
+      // when
+      await recordGenAiCompletionSpan(
+        { id: "asst_completion_name", modelID: "gpt-5.5", providerID: "opencode", tokens: { input: 5, output: 3 } },
+        sessionID,
+      )
+      await handle.shutdown()
+
+      // then
+      const traceLines = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spans = traceLines
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => JSON.parse(line))
+      expect(spans.find((s) => s.name === "sisyphus.gen_ai.completion.gpt-5.5")).toBeDefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test("omits gen_ai.agent.name when the session has no known active agent", async () => {
     // given — no setSessionAgent() call for this session at all
     const dir = mkdtempSync(join(tmpdir(), "gen-ai-agent-name-missing-test-"))
@@ -715,10 +743,10 @@ describe("captureFirstUserPrompt", () => {
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line))
       // then — the span NAME itself carries the agent too (not just the
-      // Tag), matching tool-span-tracker.ts's "{agent}: hook/{tool}" — a
+      // Tag), matching tool-span-tracker.ts's "{agent}.hook.{tool}" — a
       // reader shouldn't have to click into a span just to see which agent
       // it belongs to.
-      const promptSpan = spans.find((s) => s.name === "explore: agent.prompt")
+      const promptSpan = spans.find((s) => s.name === "explore.agent.prompt")
       expect(promptSpan).toBeDefined()
       expect(promptSpan.attributes["gen_ai.agent.name"]).toBe("explore")
     } finally {

@@ -131,7 +131,7 @@ describe("createToolSpanTracker", () => {
     expect(hasSessionUsedSkill("session-no-skill")).toBe(false)
   })
 
-  test("names the span '{agent}: hook/{tool}' and tags gen_ai.agent.name when the session's active agent is known", async () => {
+  test("names the span '{agent}.hook.{tool}' and tags gen_ai.agent.name when the session's active agent is known", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-agent-name-test-"))
     try {
       const handle = initializeOtel({
@@ -151,7 +151,7 @@ describe("createToolSpanTracker", () => {
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line))
-      const hookSpan = spans.find((s) => s.name === "sisyphus: hook/write")
+      const hookSpan = spans.find((s) => s.name === "sisyphus.hook.write")
       expect(hookSpan).toBeDefined()
       // hook.name stays the raw tool name regardless of the span's display
       // name — this is what dashboards/queries key off of.
@@ -162,7 +162,7 @@ describe("createToolSpanTracker", () => {
     }
   })
 
-  test("names an MCP tool's span '{agent}: mcp/{server}/{tool}' when the session's active agent is known", async () => {
+  test("names an MCP tool's span '{agent}.mcp.{server}.{tool}' when the session's active agent is known", async () => {
     const dir = mkdtempSync(join(tmpdir(), "tool-span-tracker-agent-mcp-name-test-"))
     try {
       setKnownMcpServerNames(["context7"])
@@ -183,7 +183,7 @@ describe("createToolSpanTracker", () => {
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line))
-      const hookSpan = spans.find((s) => s.name === "explore: mcp/context7/context7_resolve-library-id")
+      const hookSpan = spans.find((s) => s.name === "explore.mcp.context7.context7_resolve-library-id")
       expect(hookSpan).toBeDefined()
       expect(hookSpan.attributes["hook.name"]).toBe("context7_resolve-library-id")
       expect(hookSpan.attributes["gen_ai.agent.name"]).toBe("explore")
