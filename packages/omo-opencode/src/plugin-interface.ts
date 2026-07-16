@@ -87,6 +87,7 @@ export function createPluginInterface(args: {
       firstMessageVariantGate,
       managers,
       hooks,
+      toolSpanTracker,
     }),
 
     "tool.definition": createToolDefinitionHandler({

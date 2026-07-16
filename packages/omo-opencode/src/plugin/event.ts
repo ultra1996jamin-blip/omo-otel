@@ -24,6 +24,7 @@ import {
 } from "./event-session-lifecycle";
 import { createEventTeamHandlers } from "./event-team-handlers";
 import type { EventInput, FirstMessageVariantGate, PluginEventContext } from "./event-types";
+import type { ToolSpanTracker } from "./tool-span-tracker";
 
 export { extractErrorMessage } from "./event-error-utils";
 
@@ -33,8 +34,9 @@ export function createEventHandler(args: {
   firstMessageVariantGate: FirstMessageVariantGate;
   managers: Managers;
   hooks: CreatedHooks;
+  toolSpanTracker?: ToolSpanTracker;
 }): (input: EventInput) => Promise<void> {
-  const { ctx, pluginConfig, firstMessageVariantGate, managers, hooks } = args;
+  const { ctx, pluginConfig, firstMessageVariantGate, managers, hooks, toolSpanTracker } = args;
   const tmuxIntegrationEnabled = pluginConfig.tmux?.enabled ?? false;
   const pluginContext = ctx as PluginEventContext;
   const isRuntimeFallbackEnabled =
@@ -164,6 +166,22 @@ export function createEventHandler(args: {
       });
       await runEventHookSafely("teamLeadOrphanHandler", teamHandlers.teamLeadOrphanHandler, input);
       await runEventHookSafely("teamMemberStatusHandler", teamHandlers.teamMemberStatusHandler, input);
+    }
+
+    if (event.type === "message.part.updated") {
+      // tool.execute.after never fires for failed tools, so their spans ended
+      // (or leaked) without error status — every span in ClickHouse showed
+      // STATUS_CODE_UNSET. The tool part's state transition to "error" is the
+      // only signal OpenCode gives us, so close the span from here.
+      const part = props?.part as
+        | { type?: string; tool?: string; sessionID?: string; callID?: string; state?: { status?: string; error?: string } }
+        | undefined;
+      if (part?.type === "tool" && part.state?.status === "error" && part.sessionID && part.callID && part.tool) {
+        toolSpanTracker?.end(
+          { tool: part.tool, sessionID: part.sessionID, callID: part.callID },
+          new Error(part.state.error ?? "tool execution failed"),
+        );
+      }
     }
 
     if (event.type === "message.removed") handleMessageRemovedEvent(props);
