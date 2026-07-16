@@ -1,0 +1,1373 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "type": "grafana",
+      "version": "11.0.0"
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus",
+      "type": "datasource",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "배포 이벤트",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "oh-my-openagent A/B 회귀 분석 — 배포 전후 응답시간·성공률·토큰 비용 비교",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 2,
+  "id": null,
+  "links": [
+    {
+      "keepTime": true,
+      "title": "KPI 종합",
+      "type": "link",
+      "url": "/d/omo-kpi"
+    },
+    {
+      "keepTime": true,
+      "title": "비용·토큰",
+      "type": "link",
+      "url": "/d/omo-cost"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "⚖️ A/B 시나리오 비교 — Before vs After",
+      "type": "row"
+    },
+    {
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "content": "## A/B 회귀 분석 사용 방법\n\n1. 왼쪽 변수 패널에서 **시나리오 A 시간 범위**와 **시나리오 B 시간 범위**를 선택하세요.\n2. 아래 비교 패널이 두 시간대의 지표를 나란히 보여줍니다.\n3. 배포 이벤트(빨간 주석)를 기준으로 Before = A, After = B로 설정하면 회귀 검증이 됩니다.\n4. **에러율↑ / 레이턴시↑ / 토큰↑** 가 모두 없으면 회귀 없음으로 판단할 수 있습니다.",
+        "mode": "markdown"
+      },
+      "title": "사용 방법",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.50, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[A] p50",
+          "refId": "A1"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[A] p95",
+          "refId": "A2"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[A] p99",
+          "refId": "A3"
+        }
+      ],
+      "timeFrom": "$scenario_a_from",
+      "timeShift": null,
+      "title": "레이턴시 비교 — A 시나리오 (p50·p95·p99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.50, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[B] p50",
+          "refId": "B1"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[B] p95",
+          "refId": "B2"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__rate_interval])) by (le))",
+          "legendFormat": "[B] p99",
+          "refId": "B3"
+        }
+      ],
+      "timeFrom": "$scenario_b_from",
+      "timeShift": null,
+      "title": "레이턴시 비교 — B 시나리오 (p50·p95·p99)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 10,
+      "title": "📊 성공률·에러율 비교",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(100 * (1 - sum(rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\", status_code=\"STATUS_CODE_ERROR\"}[5m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[5m])), 0.0001))) or vector(0)",
+          "legendFormat": "[A] 성공률",
+          "refId": "A"
+        }
+      ],
+      "timeFrom": "$scenario_a_from",
+      "title": "A 시나리오 — 성공률 (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "min"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(100 * (1 - sum(rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\", status_code=\"STATUS_CODE_ERROR\"}[5m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[5m])), 0.0001))) or vector(0)",
+          "legendFormat": "[B] 성공률",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": "$scenario_b_from",
+      "title": "B 시나리오 — 성공률 (5m)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 20,
+      "title": "📋 A vs B 요약 비교 테이블",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "displayMode": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50 (ms)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1000
+                    },
+                    {
+                      "color": "red",
+                      "value": 5000
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에러율 %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 15
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 21,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Span"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum by (span_name) (increase(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.50, sum by (span_name, le) (rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.95, sum by (span_name, le) (rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(100 * sum by (span_name) (rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\", status_code=\"STATUS_CODE_ERROR\"}[$__range])) / clamp_min(sum by (span_name) (rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])), 0.0001)) or vector(0)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "D"
+        }
+      ],
+      "timeFrom": "$scenario_a_from",
+      "title": "A 시나리오 — 지표 요약",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "호출 수",
+              "Value #B": "p50 (ms)",
+              "Value #C": "p95 (ms)",
+              "Value #D": "에러율 %",
+              "span_name": "Span"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "displayMode": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50 (ms)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1000
+                    },
+                    {
+                      "color": "red",
+                      "value": 5000
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "에러율 %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 15
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 22,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Span"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum by (span_name) (increase(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.50, sum by (span_name, le) (rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "histogram_quantile(0.95, sum by (span_name, le) (rate(omo_duration_milliseconds_bucket{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(100 * sum by (span_name) (rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\", status_code=\"STATUS_CODE_ERROR\"}[$__range])) / clamp_min(sum by (span_name) (rate(omo_calls_total{span_name=~\"$span_filter\", gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])), 0.0001)) or vector(0)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{span_name}}",
+          "refId": "D"
+        }
+      ],
+      "timeFrom": "$scenario_b_from",
+      "title": "B 시나리오 — 지표 요약",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "Value #A": "호출 수",
+              "Value #B": "p50 (ms)",
+              "Value #C": "p95 (ms)",
+              "Value #D": "에러율 %",
+              "span_name": "Span"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 30,
+      "title": "🔄 토큰·비용 회귀 비교",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000
+              },
+              {
+                "color": "red",
+                "value": 500000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "id": 31,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_tokens_total[$__range]))",
+          "instant": true,
+          "legendFormat": "A 시나리오 토큰",
+          "refId": "A"
+        }
+      ],
+      "title": "A vs B — 토큰 사용량 비교",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000
+              },
+              {
+                "color": "red",
+                "value": 500000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "id": 32,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_tokens_total[$__range]))",
+          "instant": true,
+          "legendFormat": "B 시나리오 토큰",
+          "refId": "B"
+        }
+      ],
+      "timeFrom": "$scenario_b_from",
+      "title": "B 시나리오 — 토큰 사용량 비교",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 40,
+      "title": "🧠 컨텍스트 크기 관리 — 모델별 / Skill 사용 A-B 비교",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "모델(+ provider)별로 컨텍스트 윈도우를 얼마나 채우고 있는지 — 100%에 가까워질수록 compaction/한도 초과 위험이 커집니다.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "avg(omo_gen_ai_context_usage_ratio{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}) by (gen_ai_request_model, gen_ai_system)",
+          "legendFormat": "{{gen_ai_request_model}} ({{gen_ai_system}})",
+          "refId": "A"
+        }
+      ],
+      "title": "모델별 컨텍스트 사용률 (Provider 포함)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "같은 시간대에 Skill을 쓴 세션과 안 쓴 세션의 컨텍스트 사용률 비교 — Skill이 컨텍스트를 얼마나 더 채우는지 A/B로 볼 수 있습니다.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*true.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*false.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
+      "id": 42,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "avg(omo_gen_ai_context_usage_ratio{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}) by (gen_ai_skill_used)",
+          "legendFormat": "skill_used={{gen_ai_skill_used}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Skill 사용 여부별 컨텍스트 사용률 비교",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "선택한 기간 동안 모델별로 관측된 컨텍스트 사용률의 최고치 — 한도에 가장 가까이 갔던 순간을 한눈에 봅니다.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 43,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "max_over_time(omo_gen_ai_context_usage_ratio{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])",
+          "instant": true,
+          "legendFormat": "{{gen_ai_request_model}} ({{gen_ai_system}})",
+          "refId": "A"
+        }
+      ],
+      "title": "선택 기간 내 모델별 최대 컨텍스트 사용률",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "codemate/CodeLLMPro 같은 커스텀 프로바이더는 이 프로젝트가 컨텍스트 한도를 자동으로 알 수 없어서 위 자동 계산 패널엔 안 나옵니다. 이 패널은 왼쪽 위 '컨텍스트 한도 (수동, 토큰)' 변수에 입력한 값으로 직접 나눠서 계산합니다 — 실제 모델 문서/관리자에게 확인한 값으로 바꿔서 입력하세요.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": false
+          },
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "avg(omo_gen_ai_context_used_tokens{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}) by (gen_ai_request_model, gen_ai_system) / $context_limit",
+          "legendFormat": "{{gen_ai_request_model}} ({{gen_ai_system}}) — 수동 한도 기준",
+          "refId": "A"
+        }
+      ],
+      "title": "모델별 컨텍스트 사용률 — 수동 한도 기준 ($context_limit 토큰)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "omo",
+    "regression",
+    "ab-test",
+    "openagent"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "now-2h",
+          "value": "now-2h"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "A 시나리오 시작 (배포 전)",
+        "multi": false,
+        "name": "scenario_a_from",
+        "options": [
+          {
+            "text": "1시간 전",
+            "value": "now-1h"
+          },
+          {
+            "text": "2시간 전",
+            "value": "now-2h"
+          },
+          {
+            "text": "6시간 전",
+            "value": "now-6h"
+          },
+          {
+            "text": "12시간 전",
+            "value": "now-12h"
+          },
+          {
+            "text": "1일 전",
+            "value": "now-1d"
+          },
+          {
+            "text": "2일 전",
+            "value": "now-2d"
+          },
+          {
+            "text": "1주일 전",
+            "value": "now-1w"
+          }
+        ],
+        "query": "now-2h",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "now-30m",
+          "value": "now-30m"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "B 시나리오 시작 (배포 후)",
+        "multi": false,
+        "name": "scenario_b_from",
+        "options": [
+          {
+            "text": "30분 전",
+            "value": "now-30m"
+          },
+          {
+            "text": "1시간 전",
+            "value": "now-1h"
+          },
+          {
+            "text": "2시간 전",
+            "value": "now-2h"
+          },
+          {
+            "text": "6시간 전",
+            "value": "now-6h"
+          }
+        ],
+        "query": "now-30m",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "agent.execute.* (에이전트 실행)",
+          "value": "agent\\.execute\\..*"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "비교 대상 Span",
+        "multi": false,
+        "name": "span_filter",
+        "options": [
+          {
+            "text": "agent.execute.* (에이전트 실행)",
+            "value": "agent\\.execute\\..*"
+          },
+          {
+            "text": "{agent}.hook/mcp.{tool} (도구 호출)",
+            "value": ".*\\.hook\\..*|.*\\.mcp\\..*|hook\\.execute\\..*"
+          },
+          {
+            "text": "gen_ai.completion.* (LLM 호출)",
+            "value": ".*gen_ai\\.completion\\..*"
+          },
+          {
+            "text": "전체",
+            "value": ".*"
+          }
+        ],
+        "query": "agent\\.execute\\..*",
+        "type": "custom"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "모델 필터",
+        "multi": true,
+        "name": "model_filter",
+        "options": [],
+        "query": "label_values(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}, gen_ai_request_model)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "에이전트 필터",
+        "multi": true,
+        "name": "agent_filter",
+        "options": [],
+        "query": "label_values(omo_calls_total{span_name=~\"agent\\\\.execute\\\\..*\"}, gen_ai_agent_name)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "128000",
+          "value": "128000"
+        },
+        "description": "이 프로젝트가 컨텍스트 한도를 자동으로 알 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력값 — 아래 '수동 한도 기준' 패널에서 omo_gen_ai_context_used_tokens / 이 값 으로 사용률을 계산합니다. 실제 모델의 컨텍스트 윈도우 크기로 바꿔서 입력하세요.",
+        "hide": 0,
+        "label": "컨텍스트 한도 (수동, 토큰)",
+        "name": "context_limit",
+        "options": [
+          {
+            "text": "128000",
+            "value": "128000"
+          }
+        ],
+        "query": "128000",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "OMO Regression A/B Dashboard",
+  "uid": "omo-regression",
+  "version": 1
+}

@@ -1,0 +1,1153 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "type": "grafana",
+      "version": "11.0.0"
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus",
+      "type": "datasource",
+      "version": "1.0.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "oh-my-openagent Token·비용 대시보드 — Model별·일별·주별 사용량 추이 및 이상 감지",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "keepTime": true,
+      "title": "KPI 종합",
+      "type": "link",
+      "url": "/d/omo-kpi"
+    },
+    {
+      "keepTime": true,
+      "title": "회귀 분석",
+      "type": "link",
+      "url": "/d/omo-regression"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "title": "💰 토큰·비용 요약",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "총 토큰",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500000
+              },
+              {
+                "color": "red",
+                "value": 2000000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_tokens_total[$__range]))",
+          "legendFormat": "총 토큰",
+          "refId": "A"
+        }
+      ],
+      "title": "총 토큰 사용량 (선택 기간)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "displayName": "입력 토큰",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_input_tokens_total[$__range]))",
+          "legendFormat": "입력",
+          "refId": "A"
+        }
+      ],
+      "title": "총 입력 토큰",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          },
+          "displayName": "출력 토큰",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_output_tokens_total[$__range]))",
+          "legendFormat": "출력",
+          "refId": "A"
+        }
+      ],
+      "title": "총 출력 토큰",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "OpenCode가 실제로 보고한 비용(gen_ai.usage.cost) 합산 — 모델별 실제 요금 그대로 반영, 고정 단가 가정 없음",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 4,
+          "displayName": "예상 비용",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_cost_total[$__range]))",
+          "legendFormat": "예상 비용",
+          "refId": "A"
+        }
+      ],
+      "title": "예상 비용 (USD)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "LLM 호출",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[$__range]))",
+          "legendFormat": "호출 수",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM 호출 횟수",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "displayName": "평균 토큰/요청",
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_tokens_total[10m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[10m])), 0.0001)",
+          "legendFormat": "평균 토큰",
+          "refId": "A"
+        }
+      ],
+      "title": "평균 토큰/요청",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 10,
+      "title": "📈 시계열 토큰 추이",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "입력 토큰"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#5794F2",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "출력 토큰"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 6
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_input_tokens_total[5m])) * 60",
+          "legendFormat": "입력 토큰",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_output_tokens_total[5m])) * 60",
+          "legendFormat": "출력 토큰",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_tokens_total[5m])) * 60",
+          "legendFormat": "총 토큰",
+          "refId": "C"
+        }
+      ],
+      "title": "토큰 사용량 추이 (입력 vs 출력)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "lineWidth": 2
+          },
+          "decimals": 4,
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_cost_total[5m])) * 60",
+          "legendFormat": "분당 예상 비용",
+          "refId": "A"
+        }
+      ],
+      "title": "누적 예상 비용 (USD)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 20,
+      "title": "🤖 Model별 분석",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum by (gen_ai_request_model) (increase(omo_gen_ai_usage_tokens_total[$__range]))",
+          "instant": true,
+          "legendFormat": "{{gen_ai_request_model}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Model별 토큰 사용량",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 8,
+        "y": 16
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "sum",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum by (gen_ai_request_model) (rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m]))",
+          "legendFormat": "{{gen_ai_request_model}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Model별 호출 횟수 추이",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 30,
+      "title": "⚠️ 이상 감지 · 알림 임계값",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "현재 사용량이 1h 평균의 3배를 초과하면 이상 신호로 판단",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(rate(omo_gen_ai_usage_tokens_total[5m])) / clamp_min(sum(rate(omo_gen_ai_usage_tokens_total[1h])), 0.0001)",
+          "legendFormat": "현재/1h평균 배수",
+          "refId": "A"
+        }
+      ],
+      "title": "토큰 사용량 급증 감지 (z-score)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 100000
+              },
+              {
+                "color": "red",
+                "value": 500000
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "id": 32,
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_tokens_total[1d]))",
+          "instant": true,
+          "legendFormat": "오늘 (24h)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "sum(increase(omo_gen_ai_usage_tokens_total[7d]))",
+          "instant": true,
+          "legendFormat": "이번 주 (7d)",
+          "refId": "B"
+        }
+      ],
+      "title": "1일/7일 토큰 사용량 비교",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 33,
+      "title": "🧮 수동 단가 기반 예상 비용 (gen_ai.usage.cost를 보고하지 않는 모델/프로바이더용, $price_per_1m_input / $price_per_1m_output 설정)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "실제 gen_ai.usage.cost가 0이거나 보고되지 않는 커스텀/프록시 프로바이더를 위해, 입력·출력 토큰 수에 대시보드 상단의 수동 단가($price_per_1m_input, $price_per_1m_output)를 곱해 추정한 비용",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 4,
+          "displayName": "예상 비용 (수동 단가)",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 35
+      },
+      "id": 34,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total[$__range])) * $price_per_1m_output / 1000000)",
+          "legendFormat": "예상 비용 (수동 단가)",
+          "refId": "A"
+        }
+      ],
+      "title": "예상 비용 (수동 단가 기준, USD)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "분당 토큰 사용량 x 수동 단가로 환산한 예상 비용 추이",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "lineWidth": 2
+          },
+          "decimals": 4,
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 35
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(rate(omo_gen_ai_usage_input_tokens_total[5m])) * 60 * $price_per_1m_input / 1000000) + (sum(rate(omo_gen_ai_usage_output_tokens_total[5m])) * 60 * $price_per_1m_output / 1000000)",
+          "legendFormat": "분당 예상 비용 (수동 단가)",
+          "refId": "A"
+        }
+      ],
+      "title": "누적 예상 비용 (수동 단가 기준, USD)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 36,
+      "panels": [],
+      "title": "🧪 모델별 가상 단가 기반 비용 (사이즈/성능 비례 추정 — 실제 계약 단가 아님)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-by-claude"
+      },
+      "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. Max/Pro/Image 단가는 공개된 실제 과금 기준이 아니라, 벤치마크·파라미터 규모 비례로 추정한 가상값이므로 실제 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 4,
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 37,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_output / 1000000)",
+          "legendFormat": "CodeLLM-Max (${price_per_1m_input}/${price_per_1m_output})",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_input_pro / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_output_pro / 1000000)",
+          "legendFormat": "CodeLLM-Pro (${price_per_1m_input_pro}/${price_per_1m_output_pro})",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_input_image / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_output_image / 1000000)",
+          "legendFormat": "CodeLLM-Image (${price_per_1m_input_image}/${price_per_1m_output_image})",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-by-claude"
+          },
+          "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_output / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_input_pro / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_output_pro / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_input_image / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_output_image / 1000000)",
+          "legendFormat": "합계 (가상 단가 기준)",
+          "refId": "D"
+        }
+      ],
+      "title": "모델별 예상 비용 (가상 단가 기준, USD)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "omo",
+    "cost",
+    "tokens",
+    "openagent"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-by-claude"
+        },
+        "definition": "label_values(omo_gen_ai_usage_tokens_total, gen_ai_request_model)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "모델",
+        "multi": true,
+        "name": "model",
+        "options": [],
+        "query": {
+          "query": "label_values(omo_gen_ai_usage_tokens_total, gen_ai_request_model)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-by-claude"
+        },
+        "definition": "label_values(omo_calls_total, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "서비스",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(omo_calls_total, service_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "3",
+          "value": "3"
+        },
+        "description": "OpenCode가 비용을 자동으로 계산할 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력 단가 — 입력 토큰 1M개당 USD. 전체 합산 패널(위쪽 '토큰·비용 요약')에서 쓰이며, 모델별 가상 단가로는 CodeLLM-Max 기준값으로 사용됨. 아래 '수동 단가 기준' 패널에서 실제 요금표에 맞게 값을 바꿔서 입력하세요.",
+        "hide": 0,
+        "label": "입력 토큰 단가 - Max (USD / 1M tokens)",
+        "name": "price_per_1m_input",
+        "options": [
+          {
+            "text": "3",
+            "value": "3"
+          }
+        ],
+        "query": "3",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "15",
+          "value": "15"
+        },
+        "description": "OpenCode가 비용을 자동으로 계산할 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력 단가 — 출력 토큰 1M개당 USD. 모델별 가상 단가로는 CodeLLM-Max 기준값으로 사용됨.",
+        "hide": 0,
+        "label": "출력 토큰 단가 - Max (USD / 1M tokens)",
+        "name": "price_per_1m_output",
+        "options": [
+          {
+            "text": "15",
+            "value": "15"
+          }
+        ],
+        "query": "15",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "1",
+          "value": "1"
+        },
+        "description": "CodeLLM-Pro 가상 단가(입력) — 공개 단가가 없는 자체호스팅 모델이라, Max($3/$15) 대비 SWE-bench Pro 벤치마크(50.4 vs 62.1) 및 에이전트 특화 포지셔닝을 감안해 사이즈/성능 비례로 추정한 값. 실제 계약 단가가 정해지면 교체할 것.",
+        "hide": 0,
+        "label": "입력 토큰 단가 - Pro (USD / 1M, 가상)",
+        "name": "price_per_1m_input_pro",
+        "options": [
+          {
+            "text": "1",
+            "value": "1"
+          }
+        ],
+        "query": "1",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "5",
+          "value": "5"
+        },
+        "description": "CodeLLM-Pro 가상 단가(출력) — 추정 근거는 입력 단가와 동일.",
+        "hide": 0,
+        "label": "출력 토큰 단가 - Pro (USD / 1M, 가상)",
+        "name": "price_per_1m_output_pro",
+        "options": [
+          {
+            "text": "5",
+            "value": "5"
+          }
+        ],
+        "query": "5",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "0.5",
+          "value": "0.5"
+        },
+        "description": "CodeLLM-Image 가상 단가(입력) — 활성 파라미터 ~4B의 경량 MoE(Gemma4-31B 동급)로, Max 대비 가장 저렴한 티어로 추정. 실제 계약 단가가 정해지면 교체할 것.",
+        "hide": 0,
+        "label": "입력 토큰 단가 - Image (USD / 1M, 가상)",
+        "name": "price_per_1m_input_image",
+        "options": [
+          {
+            "text": "0.5",
+            "value": "0.5"
+          }
+        ],
+        "query": "0.5",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "2",
+          "value": "2"
+        },
+        "description": "CodeLLM-Image 가상 단가(출력) — 추정 근거는 입력 단가와 동일.",
+        "hide": 0,
+        "label": "출력 토큰 단가 - Image (USD / 1M, 가상)",
+        "name": "price_per_1m_output_image",
+        "options": [
+          {
+            "text": "2",
+            "value": "2"
+          }
+        ],
+        "query": "2",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "OMO Cost & Token Dashboard",
+  "uid": "omo-cost",
+  "version": 1
+}
