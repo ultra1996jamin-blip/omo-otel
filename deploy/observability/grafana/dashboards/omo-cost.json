@@ -507,7 +507,7 @@
           "refId": "A"
         }
       ],
-      "title": "누적 예상 비용 (USD)",
+      "title": "분당 예상 비용 추이 (USD)",
       "type": "timeseries"
     },
     {
@@ -888,7 +888,7 @@
           "refId": "A"
         }
       ],
-      "title": "누적 예상 비용 (수동 단가 기준, USD)",
+      "title": "분당 예상 비용 추이 (수동 단가 기준, USD)",
       "type": "timeseries"
     },
     {
