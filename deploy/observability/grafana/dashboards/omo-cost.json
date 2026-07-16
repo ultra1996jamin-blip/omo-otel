@@ -213,7 +213,7 @@
       "description": "OpenCode가 실제로 보고한 비용(gen_ai.usage.cost) 합산 — 모델별 실제 요금 그대로 반영, 고정 단가 가정 없음",
       "fieldConfig": {
         "defaults": {
-          "decimals": 4,
+          "decimals": 1,
           "displayName": "예상 비용",
           "thresholds": {
             "mode": "absolute",
@@ -475,7 +475,7 @@
             "gradientMode": "opacity",
             "lineWidth": 2
           },
-          "decimals": 4,
+          "decimals": 1,
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -790,7 +790,7 @@
       "description": "실제 gen_ai.usage.cost가 0이거나 보고되지 않는 커스텀/프록시 프로바이더를 위해, 입력·출력 토큰 수에 대시보드 상단의 수동 단가($price_per_1m_input, $price_per_1m_output)를 곱해 추정한 비용",
       "fieldConfig": {
         "defaults": {
-          "decimals": 4,
+          "decimals": 1,
           "displayName": "예상 비용 (수동 단가)",
           "thresholds": {
             "mode": "absolute",
@@ -856,7 +856,7 @@
             "gradientMode": "opacity",
             "lineWidth": 2
           },
-          "decimals": 4,
+          "decimals": 1,
           "unit": "currencyUSD"
         },
         "overrides": []
@@ -912,7 +912,7 @@
       "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. CodeLLM Max/Pro/Image 자체는 공개 과금 기준이 없는 자체호스팅 모델이라, 동급으로 언급된 모델(Max≈GLM-5.2, Pro≈Qwen3.5-397B, Image≈Gemma4-31B)의 2026-07 기준 공식/표준 API 단가를 참고값으로 사용. 실제 CodeLLM 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
       "fieldConfig": {
         "defaults": {
-          "decimals": 4,
+          "decimals": 1,
           "unit": "currencyUSD"
         },
         "overrides": []
