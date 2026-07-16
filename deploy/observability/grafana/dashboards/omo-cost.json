@@ -901,7 +901,7 @@
       },
       "id": 36,
       "panels": [],
-      "title": "🧪 모델별 가상 단가 기반 비용 (사이즈/성능 비례 추정 — 실제 계약 단가 아님)",
+      "title": "🧪 모델별 비용 (동급 모델 공개 단가 기준 — 2026-07, 실제 CodeLLM 계약 단가 아님)",
       "type": "row"
     },
     {
@@ -909,7 +909,7 @@
         "type": "prometheus",
         "uid": "prometheus-by-claude"
       },
-      "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. Max/Pro/Image 단가는 공개된 실제 과금 기준이 아니라, 벤치마크·파라미터 규모 비례로 추정한 가상값이므로 실제 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
+      "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. CodeLLM Max/Pro/Image 자체는 공개 과금 기준이 없는 자체호스팅 모델이라, 동급으로 언급된 모델(Max≈Claude Opus 4.7, Pro≈Qwen3.5-397B, Image≈Gemma4-31B)의 2026-07 기준 공식/표준 API 단가를 참고값으로 사용. 실제 CodeLLM 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
       "fieldConfig": {
         "defaults": {
           "decimals": 4,
@@ -969,11 +969,11 @@
             "uid": "prometheus-by-claude"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_output / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_input_pro / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_output_pro / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_input_image / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_output_image / 1000000)",
-          "legendFormat": "합계 (가상 단가 기준)",
+          "legendFormat": "합계 (동급 모델 공개 단가 기준)",
           "refId": "D"
         }
       ],
-      "title": "모델별 예상 비용 (가상 단가 기준, USD)",
+      "title": "모델별 예상 비용 (동급 모델 공개 단가 기준, USD)",
       "type": "stat"
     }
   ],
@@ -1033,67 +1033,13 @@
       },
       {
         "current": {
-          "text": "3",
-          "value": "3"
-        },
-        "description": "OpenCode가 비용을 자동으로 계산할 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력 단가 — 입력 토큰 1M개당 USD. 전체 합산 패널(위쪽 '토큰·비용 요약')에서 쓰이며, 모델별 가상 단가로는 CodeLLM-Max 기준값으로 사용됨. 아래 '수동 단가 기준' 패널에서 실제 요금표에 맞게 값을 바꿔서 입력하세요.",
-        "hide": 0,
-        "label": "입력 토큰 단가 - Max (USD / 1M tokens)",
-        "name": "price_per_1m_input",
-        "options": [
-          {
-            "text": "3",
-            "value": "3"
-          }
-        ],
-        "query": "3",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "15",
-          "value": "15"
-        },
-        "description": "OpenCode가 비용을 자동으로 계산할 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력 단가 — 출력 토큰 1M개당 USD. 모델별 가상 단가로는 CodeLLM-Max 기준값으로 사용됨.",
-        "hide": 0,
-        "label": "출력 토큰 단가 - Max (USD / 1M tokens)",
-        "name": "price_per_1m_output",
-        "options": [
-          {
-            "text": "15",
-            "value": "15"
-          }
-        ],
-        "query": "15",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "1",
-          "value": "1"
-        },
-        "description": "CodeLLM-Pro 가상 단가(입력) — 공개 단가가 없는 자체호스팅 모델이라, Max($3/$15) 대비 SWE-bench Pro 벤치마크(50.4 vs 62.1) 및 에이전트 특화 포지셔닝을 감안해 사이즈/성능 비례로 추정한 값. 실제 계약 단가가 정해지면 교체할 것.",
-        "hide": 0,
-        "label": "입력 토큰 단가 - Pro (USD / 1M, 가상)",
-        "name": "price_per_1m_input_pro",
-        "options": [
-          {
-            "text": "1",
-            "value": "1"
-          }
-        ],
-        "query": "1",
-        "type": "textbox"
-      },
-      {
-        "current": {
           "text": "5",
           "value": "5"
         },
-        "description": "CodeLLM-Pro 가상 단가(출력) — 추정 근거는 입력 단가와 동일.",
+        "description": "동급 모델(Claude Opus 4.7) 공식 API 단가 기준(2026-07) — 입력 토큰 1M개당 USD. CodeLLM-Max 자체는 공개 단가가 없는 자체호스팅 모델이라, 동급으로 언급된 Claude Opus 4.7의 공식 단가($5/$25)를 참고값으로 사용. 실제 계약 단가가 정해지면 교체할 것.",
         "hide": 0,
-        "label": "출력 토큰 단가 - Pro (USD / 1M, 가상)",
-        "name": "price_per_1m_output_pro",
+        "label": "입력 토큰 단가 - Max (USD / 1M, Opus 4.7 기준)",
+        "name": "price_per_1m_input",
         "options": [
           {
             "text": "5",
@@ -1105,38 +1051,92 @@
       },
       {
         "current": {
-          "text": "0.5",
-          "value": "0.5"
+          "text": "25",
+          "value": "25"
         },
-        "description": "CodeLLM-Image 가상 단가(입력) — 활성 파라미터 ~4B의 경량 MoE(Gemma4-31B 동급)로, Max 대비 가장 저렴한 티어로 추정. 실제 계약 단가가 정해지면 교체할 것.",
+        "description": "동급 모델(Claude Opus 4.7) 공식 API 단가 기준(2026-07) — 출력 토큰 1M개당 USD.",
         "hide": 0,
-        "label": "입력 토큰 단가 - Image (USD / 1M, 가상)",
-        "name": "price_per_1m_input_image",
+        "label": "출력 토큰 단가 - Max (USD / 1M, Opus 4.7 기준)",
+        "name": "price_per_1m_output",
         "options": [
           {
-            "text": "0.5",
-            "value": "0.5"
+            "text": "25",
+            "value": "25"
           }
         ],
-        "query": "0.5",
+        "query": "25",
         "type": "textbox"
       },
       {
         "current": {
-          "text": "2",
-          "value": "2"
+          "text": "0.39",
+          "value": "0.39"
         },
-        "description": "CodeLLM-Image 가상 단가(출력) — 추정 근거는 입력 단가와 동일.",
+        "description": "동급 모델(Qwen3.5-397B) 공식 API 단가 기준(2026-07) — 입력 토큰 1M개당 USD. CodeLLM-Pro 자체는 공개 단가가 없어, 동급으로 언급된 Qwen3.5-397B의 공식 단가($0.39/$0.90)를 참고값으로 사용. 실제 계약 단가가 정해지면 교체할 것.",
         "hide": 0,
-        "label": "출력 토큰 단가 - Image (USD / 1M, 가상)",
+        "label": "입력 토큰 단가 - Pro (USD / 1M, Qwen3.5-397B 기준)",
+        "name": "price_per_1m_input_pro",
+        "options": [
+          {
+            "text": "0.39",
+            "value": "0.39"
+          }
+        ],
+        "query": "0.39",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "0.90",
+          "value": "0.90"
+        },
+        "description": "동급 모델(Qwen3.5-397B) 공식 API 단가 기준(2026-07) — 출력 토큰 1M개당 USD.",
+        "hide": 0,
+        "label": "출력 토큰 단가 - Pro (USD / 1M, Qwen3.5-397B 기준)",
+        "name": "price_per_1m_output_pro",
+        "options": [
+          {
+            "text": "0.90",
+            "value": "0.90"
+          }
+        ],
+        "query": "0.90",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "0.12",
+          "value": "0.12"
+        },
+        "description": "동급 모델(Gemma4-31B) 표준 API 단가 기준(2026-07, OpenRouter 등 대다수 프로바이더 동일) — 입력 토큰 1M개당 USD. CodeLLM-Image 자체는 공개 단가가 없어, 동급으로 언급된 Gemma4-31B 단가($0.12/$0.35)를 참고값으로 사용. 실제 계약 단가가 정해지면 교체할 것.",
+        "hide": 0,
+        "label": "입력 토큰 단가 - Image (USD / 1M, Gemma4-31B 기준)",
+        "name": "price_per_1m_input_image",
+        "options": [
+          {
+            "text": "0.12",
+            "value": "0.12"
+          }
+        ],
+        "query": "0.12",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "0.35",
+          "value": "0.35"
+        },
+        "description": "동급 모델(Gemma4-31B) 표준 API 단가 기준(2026-07) — 출력 토큰 1M개당 USD.",
+        "hide": 0,
+        "label": "출력 토큰 단가 - Image (USD / 1M, Gemma4-31B 기준)",
         "name": "price_per_1m_output_image",
         "options": [
           {
-            "text": "2",
-            "value": "2"
+            "text": "0.35",
+            "value": "0.35"
           }
         ],
-        "query": "2",
+        "query": "0.35",
         "type": "textbox"
       }
     ]
