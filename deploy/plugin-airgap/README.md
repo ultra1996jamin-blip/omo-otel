@@ -6,9 +6,10 @@
 ## 설치
 
 ```powershell
-# 태그 기준으로 받기
-git fetch origin --tags --force
-git checkout v4.15.1-otel.13
+# 태그 기준으로 받기 (-pkg 태그가 이 패키지를 포함한 커밋을 가리킴;
+# v4.15.1-otel.13 태그는 소스 스냅샷용으로 패키지 파일이 없음)
+git fetch origin --tags
+git checkout v4.15.1-otel.13-pkg
 
 # 무결성 확인
 cd deploy\plugin-airgap
