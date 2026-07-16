@@ -909,7 +909,7 @@
         "type": "prometheus",
         "uid": "prometheus-by-claude"
       },
-      "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. CodeLLM Max/Pro/Image 자체는 공개 과금 기준이 없는 자체호스팅 모델이라, 동급으로 언급된 모델(Max≈Claude Opus 4.7, Pro≈Qwen3.5-397B, Image≈Gemma4-31B)의 2026-07 기준 공식/표준 API 단가를 참고값으로 사용. 실제 CodeLLM 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
+      "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. CodeLLM Max/Pro/Image 자체는 공개 과금 기준이 없는 자체호스팅 모델이라, 동급으로 언급된 모델(Max≈GLM-5.2, Pro≈Qwen3.5-397B, Image≈Gemma4-31B)의 2026-07 기준 공식/표준 API 단가를 참고값으로 사용. 실제 CodeLLM 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
       "fieldConfig": {
         "defaults": {
           "decimals": 4,
@@ -1033,38 +1033,38 @@
       },
       {
         "current": {
-          "text": "5",
-          "value": "5"
+          "text": "1.40",
+          "value": "1.40"
         },
-        "description": "동급 모델(Claude Opus 4.7) 공식 API 단가 기준(2026-07) — 입력 토큰 1M개당 USD. CodeLLM-Max 자체는 공개 단가가 없는 자체호스팅 모델이라, 동급으로 언급된 Claude Opus 4.7의 공식 단가($5/$25)를 참고값으로 사용. 실제 계약 단가가 정해지면 교체할 것.",
+        "description": "동급 모델(GLM-5.2, Z.ai) 공식 API 단가 기준(2026-07, GA 2026-06-16) — 입력 토큰 1M개당 USD. CodeLLM-Max 자체는 공개 단가가 없는 자체호스팅 모델이라, 동급으로 언급된 GLM-5.2의 공식 단가($1.40/$4.40)를 참고값으로 사용. 실제 계약 단가가 정해지면 교체할 것.",
         "hide": 0,
-        "label": "입력 토큰 단가 - Max (USD / 1M, Opus 4.7 기준)",
+        "label": "입력 토큰 단가 - Max (USD / 1M, GLM-5.2 기준)",
         "name": "price_per_1m_input",
         "options": [
           {
-            "text": "5",
-            "value": "5"
+            "text": "1.40",
+            "value": "1.40"
           }
         ],
-        "query": "5",
+        "query": "1.40",
         "type": "textbox"
       },
       {
         "current": {
-          "text": "25",
-          "value": "25"
+          "text": "4.40",
+          "value": "4.40"
         },
-        "description": "동급 모델(Claude Opus 4.7) 공식 API 단가 기준(2026-07) — 출력 토큰 1M개당 USD.",
+        "description": "동급 모델(GLM-5.2, Z.ai) 공식 API 단가 기준(2026-07) — 출력 토큰 1M개당 USD.",
         "hide": 0,
-        "label": "출력 토큰 단가 - Max (USD / 1M, Opus 4.7 기준)",
+        "label": "출력 토큰 단가 - Max (USD / 1M, GLM-5.2 기준)",
         "name": "price_per_1m_output",
         "options": [
           {
-            "text": "25",
-            "value": "25"
+            "text": "4.40",
+            "value": "4.40"
           }
         ],
-        "query": "25",
+        "query": "4.40",
         "type": "textbox"
       },
       {

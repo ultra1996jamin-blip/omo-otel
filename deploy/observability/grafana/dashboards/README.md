@@ -26,7 +26,7 @@ Grafana는 `updateIntervalSeconds: 30` 파일 프로비저닝이라 컨테이너
   `agent.execute.*` 계열은 애초에 접두사가 붙지 않으므로 그대로 유지.
 - `omo-cost.json`: 모델별(CodeLLM-Max/Pro/Image) 단가 변수 및 "모델별 예상 비용" 패널 추가.
   CodeLLM 계열은 공개 과금 기준이 없는 자체호스팅 모델이라, 동급 모델의 2026-07 기준 공개 API 단가를 참고값으로 사용:
-  - Max ≈ Claude Opus 4.7: $5 / $25 (1M input/output)
+  - Max ≈ GLM-5.2 (Z.ai): $1.40 / $4.40 (1M input/output)
   - Pro ≈ Qwen3.5-397B: $0.39 / $0.90
   - Image ≈ Gemma4-31B: $0.12 / $0.35
 
