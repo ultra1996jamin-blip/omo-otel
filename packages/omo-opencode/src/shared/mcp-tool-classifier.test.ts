@@ -37,4 +37,20 @@ describe("mcp-tool-classifier", () => {
 
     expect(getMcpServerNameForTool("grep_app_searchGitHub")).toBe("grep_app")
   })
+
+  test("matches a server name containing spaces against OpenCode's sanitized tool name", () => {
+    // given — observed live in the airgap deployment: a server configured as
+    // "sds confluence" registers tools as "sds_confluence_<tool>", and the
+    // raw-prefix match never classified them as MCP calls.
+    setKnownMcpServerNames(["sds confluence", "DS Search"])
+
+    expect(getMcpServerNameForTool("sds_confluence_getPageByID")).toBe("sds_confluence")
+    expect(getMcpServerNameForTool("DS_Search_codeSearch")).toBe("ds_search")
+  })
+
+  test("matches case-insensitively and across hyphen/underscore differences", () => {
+    setKnownMcpServerNames(["My-Remote-Server"])
+
+    expect(getMcpServerNameForTool("my_remote_server_fetchThing")).toBe("my_remote_server")
+  })
 })
