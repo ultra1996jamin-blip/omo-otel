@@ -516,6 +516,43 @@ describe("recordGenAiCompletionSpan", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  test("does not mark the span ERROR when error is explicitly null (not just omitted)", async () => {
+    // given — regression test: OpenCode sends `error: null` on every
+    // successful AssistantMessage rather than omitting the key. A strict
+    // `!== undefined` check treated null as "has an error", flagging 100%
+    // of completions as STATUS_CODE_ERROR (observed live: every A/B
+    // regression panel showed 0% success rate despite zero real failures).
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-null-error-span-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_null_error",
+          modelID: "gpt-5.5",
+          providerID: "opencode",
+          tokens: { input: 5, output: 3 },
+          error: null,
+        },
+        "session-null-error",
+      )
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = contents.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
+      expect(spanLine).toBeDefined()
+      const parsed = JSON.parse(spanLine!)
+      expect(parsed.status.code).not.toBe(2)
+      expect(parsed.attributes["gen_ai.error"]).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("captureFirstUserPrompt", () => {

@@ -8,16 +8,16 @@
 ```powershell
 # 태그 기준으로 받기 (-pkg 태그가 이 패키지를 포함한 커밋을 가리킴)
 git fetch origin --tags
-git checkout v4.15.1-otel.15-pkg
+git checkout v4.15.1-otel.16-pkg
 
 # 무결성 확인
 cd deploy\plugin-airgap
-Get-FileHash omo-plugin-airgap-20260717-4.15.1-otel.15.tar.gz -Algorithm SHA256
+Get-FileHash omo-plugin-airgap-20260717-4.15.1-otel.16.tar.gz -Algorithm SHA256
 # 출력이 .sha256 파일 내용과 일치해야 함
 
 # 압축 해제 후 설치
-tar -xzf omo-plugin-airgap-20260717-4.15.1-otel.15.tar.gz -C C:\setup\
-cd C:\setup\omo-plugin-airgap-20260717-4.15.1-otel.15
+tar -xzf omo-plugin-airgap-20260717-4.15.1-otel.16.tar.gz -C C:\setup\
+cd C:\setup\omo-plugin-airgap-20260717-4.15.1-otel.16
 .\install.ps1
 
 # 중요: opencode 플러그인 캐시 갱신 — 이걸 빼먹으면 구버전이 계속 로드됨
@@ -25,7 +25,7 @@ cd C:\setup\omo-plugin-airgap-20260717-4.15.1-otel.15
 pwsh .\update-cache.ps1
 ```
 
-설치 후 omo를 **완전히 재시작**하고, 트레이스의 `service.version`이 `4.15.1-otel.15`인지 확인하세요:
+설치 후 omo를 **완전히 재시작**하고, 트레이스의 `service.version`이 `4.15.1-otel.16`인지 확인하세요:
 
 ```powershell
 docker exec clickhouse-by-claude clickhouse-client -q "
@@ -36,6 +36,16 @@ FORMAT PrettyCompact"
 ```
 
 ## 버전별 변경점
+
+### otel.16
+- **긴급 수정**: LLM 호출 성공/실패 판정 로직이 `error !== undefined`로 되어 있었는데,
+  OpenCode가 정상 완료된 메시지에도 `error: null`을 명시적으로 내려주는 방식이라
+  `null !== undefined`가 `true`가 되어 **모든 LLM 호출이 에러로 오판정**되던 버그를 수정.
+  (실측: A/B 회귀 대시보드에서 실제 실패가 0건인데도 성공률이 항상 0%로 표시됨 —
+  otel.15에서 추가한 LLM 에러 캡처 기능의 회귀 버그. `!= null`로 undefined/null을 모두
+  "에러 없음"으로 처리하도록 수정)
+- otel.15를 설치하신 분은 **반드시 otel.16으로 업데이트하세요** — otel.15 상태로는
+  성공률/에러율 관련 모든 지표가 무효합니다.
 
 ### otel.15
 - LLM 호출 자체의 실패(인증 오류, rate limit, 출력 길이 초과, abort 등)도 `gen_ai.completion.*`

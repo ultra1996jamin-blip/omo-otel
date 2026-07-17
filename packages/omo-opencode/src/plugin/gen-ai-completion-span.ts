@@ -353,7 +353,13 @@ export async function recordGenAiCompletionSpan(
     // still need a span (see event.ts's messageErrored gate), so don't bail
     // out on missing token counts when info.error is present; treat them as 0
     // instead the way a call that produced no output naturally would.
-    const hasError = info.error !== undefined
+    // != (not !==) deliberately catches both undefined AND null — observed
+    // live: OpenCode sends `error: null` on successful messages rather than
+    // omitting the key, so a strict !== undefined check flagged every single
+    // completion as errored (100% error rate / 0% success on every A/B
+    // regression panel, confirmed against real traffic with zero actual
+    // failures).
+    const hasError = info.error != null
 
     if (!id || !modelID) return
     if (!hasError && (inputTokens === undefined || outputTokens === undefined)) return

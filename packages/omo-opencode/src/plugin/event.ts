@@ -211,7 +211,11 @@ export function createEventHandler(args: {
       // messageFinished alone meant errored completions never produced a
       // span at all (not even one with UNSET status), so recordGenAiCompletionSpan
       // couldn't mark it ERROR — there was nothing to mark.
-      const messageErrored = state.info?.error !== undefined;
+      // != (not !==) — OpenCode sends `error: null` on successful messages
+      // rather than omitting the key; see the matching fix/comment in
+      // gen-ai-completion-span.ts for how this masqueraded as a 100% error
+      // rate on every A/B regression panel.
+      const messageErrored = state.info?.error != null;
       if (state.sessionID && messageFinished) {
         invalidateContextWindowUsageCache(pluginContext as PluginInput, state.sessionID);
       }
