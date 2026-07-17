@@ -788,13 +788,16 @@
       },
       "id": 31,
       "options": {
-        "displayMode": "gradient",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ]
-        }
+        },
+        "textMode": "auto"
       },
       "targets": [
         {
@@ -809,7 +812,7 @@
         }
       ],
       "title": "A vs B — 토큰 사용량 비교",
-      "type": "bargauge"
+      "type": "stat"
     },
     {
       "datasource": {
@@ -847,13 +850,16 @@
       },
       "id": 32,
       "options": {
-        "displayMode": "gradient",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ]
-        }
+        },
+        "textMode": "auto"
       },
       "targets": [
         {
@@ -869,7 +875,7 @@
       ],
       "timeFrom": "$scenario_b_from",
       "title": "B 시나리오 — 토큰 사용량 비교",
-      "type": "bargauge"
+      "type": "stat"
     },
     {
       "collapsed": false,
