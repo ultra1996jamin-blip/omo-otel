@@ -1272,8 +1272,8 @@
       },
       {
         "current": {
-          "text": "agent.execute.* (에이전트 실행)",
-          "value": "agent\\.execute\\..*"
+          "text": "All",
+          "value": ".*"
         },
         "hide": 0,
         "includeAll": false,
@@ -1281,6 +1281,10 @@
         "multi": false,
         "name": "span_filter",
         "options": [
+          {
+            "text": "All",
+            "value": ".*"
+          },
           {
             "text": "agent.execute.* (에이전트 실행)",
             "value": "agent\\.execute\\..*"
@@ -1292,13 +1296,9 @@
           {
             "text": "gen_ai.completion.* (LLM 호출)",
             "value": ".*gen_ai\\.completion\\..*"
-          },
-          {
-            "text": "전체",
-            "value": ".*"
           }
         ],
-        "query": "agent\\.execute\\..*",
+        "query": ".*",
         "type": "custom"
       },
       {
