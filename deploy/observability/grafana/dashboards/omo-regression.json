@@ -1108,7 +1108,7 @@
             "type": "prometheus",
             "uid": "prometheus-by-claude"
           },
-          "expr": "max_over_time(omo_gen_ai_context_usage_ratio{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range])",
+          "expr": "max by (gen_ai_request_model, gen_ai_system) (max_over_time(omo_gen_ai_context_usage_ratio{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}[$__range]))",
           "instant": true,
           "legendFormat": "{{gen_ai_request_model}} ({{gen_ai_system}})",
           "refId": "A"
