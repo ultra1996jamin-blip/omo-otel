@@ -124,17 +124,22 @@ FORMAT Vertical"
 
 | # | 시나리오 | 원인 스팬 | 실측 증빙 |
 |---|---|---|---|
-| 1 | MCP 도구 실패 (외부 시스템) | `{agent}.mcp.ds_search.DS_Search_confluence_reader` (9.13s) | `otel.status_code=ERROR`, `error=true`, `mcp.server_name=ds_search`, Logs(1) exception |
+| 1 | MCP 도구 실패 (외부 시스템) | `librarian.mcp.grep_app.grep_app_searchGitHub` (523ms) | `otel.status_code=ERROR`, `error=true`, `mcp.server_name=grep_app`, Logs(1) exception |
 | 2 | 파일 시스템 에러 (로컬) | `{agent}.hook.read` (64.5ms) | `exception.message: File not found: C:\setup\nonexistent-trace-test-xyz-98765.txt` + 스택트레이스 |
 | 3 | 네트워크/HTTP 페치 실패 | `librarian.hook.webfetch` (567ms) | `otel.status_code=ERROR`, `error=true`, `hook.error=true`, Logs(1) exception |
 
-[📷 스크린샷: 시나리오 1 — Jaeger에서 `DS_Search_confluence_reader` 빨간 에러 스팬]
+[📷 스크린샷: 시나리오 1 — Jaeger에서 `grep_app_searchGitHub` 빨간 에러 스팬]
 
 [📷 스크린샷: 시나리오 2 — Jaeger `hook.read` 스팬 Logs 탭, exception.message/stacktrace]
 
 [📷 스크린샷: 시나리오 3 — Jaeger `librarian.hook.webfetch` 스팬, 404 exception]
 
-세 시나리오는 각각 **외부 시스템(MCP) / 로컬 파일시스템 / 네트워크(HTTP)** 로 실패 계층이 서로 다르며, 모두 트레이스 목록에서 **빨간색 에러 아이콘으로 즉시 식별**되었고, 스팬 클릭 → Logs 탭 한 번으로 에러 메시지·대상·스택트레이스까지 도달하였다. 시나리오 3(webfetch)의 경우 `exception.message`에 `StatusCode: non 2xx status code (404 GET https://github.com/hrfairy/express-async-errors)`로 실패한 URL과 HTTP 상태 코드까지 원인 스팬 하나에서 정확히 확인되었다. 별도 로그 검색이 전혀 필요 없었다. 개선 전에는 로그를 수작업으로 분석해야 했고 소요 시간의 측정 기준 자체가 없었다.
+세 시나리오는 각각 **외부 시스템(MCP) / 로컬 파일시스템 / 네트워크(HTTP)** 로 실패 계층이 서로 다르며, 모두 트레이스 목록에서 **빨간색 에러 아이콘으로 즉시 식별**되었고, 스팬 클릭 → Logs 탭 한 번으로 에러 메시지·원인·스택트레이스까지 도달하였다.
+
+- **시나리오 1(MCP, grep_app)**: `exception.message`에 `No results found for your query`와 함께, 이 도구가 자연어 질의가 아닌 리터럴 코드 패턴 검색 전용이라는 사용 안내(`Instead of 'react hook state', search for 'useState'` 등)까지 원인 스팬 하나에서 확인되었다 — 단순 실패 여부뿐 아니라 **왜 실패했고 어떻게 고쳐야 하는지**까지 트레이스에서 바로 파악 가능함을 보여준다.
+- **시나리오 3(webfetch)**: `exception.message`에 `StatusCode: non 2xx status code (404 GET https://github.com/hrfairy/express-async-errors)`로 실패한 URL과 HTTP 상태 코드까지 정확히 확인되었다.
+
+별도 로그 검색이 전혀 필요 없었다. 개선 전에는 로그를 수작업으로 분석해야 했고 소요 시간의 측정 기준 자체가 없었다.
 
 > **비고**: 정확한 t0(발생)→t1(원인 확인) 소요시간은 스톱워치 단위로 기록하지 못하였다 — 체감상 트레이스 오픈 즉시(1~2분 이내) 확인 가능한 수준이었으나, 목표(30분 이내) 대비 정량 비교를 위해서는 재측정을 권장한다.
 
