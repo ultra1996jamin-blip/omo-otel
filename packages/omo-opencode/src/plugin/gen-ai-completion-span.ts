@@ -8,7 +8,7 @@ import {
   resolveTracer,
   sessionSpanContext,
 } from "@oh-my-opencode/otel-core"
-import type { Attributes } from "@opentelemetry/api"
+import { SpanStatusCode, type Attributes } from "@opentelemetry/api"
 import { getSessionAgent } from "../features/claude-code-session-state"
 import { resolveActualContextLimit } from "../shared/context-limit-resolver"
 import { isRealUserTextPart, stripInternalInitiatorMarkers } from "../shared/internal-initiator-marker"
@@ -16,6 +16,7 @@ import { log } from "../shared/logger"
 import { getModelCacheState } from "../shared/model-context-limits-cache"
 import { normalizeSDKResponse } from "../shared/normalize-sdk-response"
 import { hasSessionUsedSkill } from "../shared/session-skill-usage-state"
+import { extractErrorMessage, extractErrorName } from "./event-error-utils"
 
 const MAX_TRACKED_MESSAGE_IDS = 5000
 const recordedMessageIds = new Set<string>()
@@ -70,6 +71,11 @@ type AssistantMessageInfo = {
     readonly created?: unknown
     readonly completed?: unknown
   }
+  // ProviderAuthError | UnknownError | MessageOutputLengthError |
+  // MessageAbortedError | ApiError in the OpenCode SDK's AssistantMessage —
+  // left as unknown here since we only need name/message out of it, via the
+  // same extractErrorName/extractErrorMessage session.error already uses.
+  readonly error?: unknown
 }
 
 export type OpencodeMessagesClient = {
@@ -342,8 +348,15 @@ export async function recordGenAiCompletionSpan(
     const cost = num(info.cost)
     const createdMs = num(info.time?.created)
     const completedMs = num(info.time?.completed)
+    // A failed call (auth error, rate limit, aborted, output-length-exceeded)
+    // may report zero/no token usage — only modelID/id are guaranteed. Errors
+    // still need a span (see event.ts's messageErrored gate), so don't bail
+    // out on missing token counts when info.error is present; treat them as 0
+    // instead the way a call that produced no output naturally would.
+    const hasError = info.error !== undefined
 
-    if (!id || !modelID || inputTokens === undefined || outputTokens === undefined) return
+    if (!id || !modelID) return
+    if (!hasError && (inputTokens === undefined || outputTokens === undefined)) return
     if (!shouldRecord(id)) return
 
     const fetched = client ? await fetchPromptAndResponseText(client, sessionID, id, parentID) : {}
@@ -353,7 +366,9 @@ export async function recordGenAiCompletionSpan(
     const prompt = lastOutgoingPromptBySession.get(sessionID) ?? fetched.prompt
     const response = fetched.response
 
-    const totalTokens = inputTokens + outputTokens + (reasoningTokens ?? 0)
+    const safeInputTokens = inputTokens ?? 0
+    const safeOutputTokens = outputTokens ?? 0
+    const totalTokens = safeInputTokens + safeOutputTokens + (reasoningTokens ?? 0)
     // Set for BOTH a top-level session (the agent the user directly picked
     // to chat with, e.g. "sisyphus") and a delegated sub-agent's own session
     // (e.g. "Sisyphus-Junior") — getSessionAgent() is keyed by sessionID and
@@ -387,14 +402,16 @@ export async function recordGenAiCompletionSpan(
     const contextLimit = providerID
       ? resolveActualContextLimit(providerID, modelID, getModelCacheState())
       : null
-    const contextUsedTokens = inputTokens + outputTokens
+    const contextUsedTokens = safeInputTokens + safeOutputTokens
     const contextUsageRatio = contextLimit ? contextUsedTokens / contextLimit : undefined
+    const errorName = hasError ? extractErrorName(info.error) : undefined
+    const errorMessage = hasError ? extractErrorMessage(info.error) : undefined
     const attributes: Attributes = {
       "gen_ai.operation.name": "chat",
       "gen_ai.system": providerID ?? "unknown",
       "gen_ai.request.model": modelID,
-      "gen_ai.usage.input_tokens": inputTokens,
-      "gen_ai.usage.output_tokens": outputTokens,
+      "gen_ai.usage.input_tokens": safeInputTokens,
+      "gen_ai.usage.output_tokens": safeOutputTokens,
       "gen_ai.usage.total_tokens": totalTokens,
       ...(agentName ? { [GEN_AI_AGENT_NAME]: agentName } : {}),
       ...(cost !== undefined ? { "gen_ai.usage.cost": cost } : {}),
@@ -415,13 +432,18 @@ export async function recordGenAiCompletionSpan(
         : {}),
       ...(prompt ? { "gen_ai.prompt": prompt } : {}),
       ...(response ? { "gen_ai.completion": response } : {}),
+      // Mirrors hook.error on tool spans — same boolean convention so
+      // Grafana's error-rate panels can filter gen_ai.completion.* spans the
+      // same way they already filter hook.*/mcp.* ones.
+      "gen_ai.error": hasError,
+      ...(errorName ? { "gen_ai.error.type": errorName } : {}),
     }
 
     // Same numbers as the span attributes above, also recorded as OTLP
     // counters — spans answer "what happened on this call"; these answer
     // "what's the total/rate over time" for the Cost & Token / KPI
     // dashboards, which query Prometheus rather than scanning ClickHouse.
-    recordGenAiUsage({ model: modelID, inputTokens, outputTokens, totalTokens, cost, agentName })
+    recordGenAiUsage({ model: modelID, inputTokens: safeInputTokens, outputTokens: safeOutputTokens, totalTokens, cost, agentName })
     // Recorded unconditionally (used_tokens has no unresolved-limit gate) —
     // see the attributes block above and recordGenAiContextUsage's own doc
     // comment for why: a model this project can't resolve a limit for is
@@ -460,6 +482,10 @@ export async function recordGenAiCompletionSpan(
     // named, separately timestamped entry in the "Logs" panel instead.
     if (prompt) span.addEvent("gen_ai.user.message", { content: prompt }, createdMs)
     if (response) span.addEvent("gen_ai.assistant.message", { content: response }, completedMs ?? Date.now())
+    if (hasError) {
+      span.recordException(errorMessage || errorName || "LLM completion failed")
+      span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage })
+    }
     span.end(completedMs ?? Date.now())
   } catch (error) {
     log("[otel] failed to record gen_ai completion span", { error })

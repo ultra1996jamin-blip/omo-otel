@@ -789,10 +789,6 @@
       "id": 31,
       "options": {
         "displayMode": "gradient",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
         "orientation": "horizontal",
         "reduceOptions": {
           "calcs": [

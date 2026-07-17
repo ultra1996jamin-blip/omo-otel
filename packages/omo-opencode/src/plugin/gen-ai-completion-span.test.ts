@@ -447,6 +447,75 @@ describe("recordGenAiCompletionSpan", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  test("marks the span ERROR and records the exception when the assistant message carries an error", async () => {
+    // given — a failed LLM call (e.g. ProviderAuthError) with no token usage,
+    // the shape event.ts's messageErrored gate now lets through even though
+    // messageFinished would be false for it.
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-error-span-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        {
+          id: "asst_llm_error",
+          modelID: "gpt-5.5",
+          providerID: "opencode",
+          error: { name: "ProviderAuthError", data: { message: "invalid API key" } },
+        },
+        "session-llm-error",
+      )
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = contents.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
+      expect(spanLine).toBeDefined()
+      const parsed = JSON.parse(spanLine!)
+      expect(parsed.status.code).toBe(2) // SpanStatusCode.ERROR
+      expect(parsed.status.message).toBe("invalid API key")
+      expect(parsed.attributes["gen_ai.error"]).toBe(true)
+      expect(parsed.attributes["gen_ai.error.type"]).toBe("ProviderAuthError")
+      expect(parsed.attributes["gen_ai.usage.input_tokens"]).toBe(0)
+      expect(parsed.attributes["gen_ai.usage.output_tokens"]).toBe(0)
+      const exceptionEvent = parsed.events.find((e: { name: string }) => e.name === "exception")
+      expect(exceptionEvent).toBeDefined()
+      expect(exceptionEvent.attributes["exception.message"]).toBe("invalid API key")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("does not mark the span ERROR when there is no error on the message", async () => {
+    // given
+    const dir = mkdtempSync(join(tmpdir(), "gen-ai-no-error-span-test-"))
+    try {
+      const handle = initializeOtel({
+        env: { OMO_OTEL_ENABLED: "true", OMO_OTEL_EXPORTER: "file", OMO_OTEL_LOCAL_STORAGE_PATH: dir },
+      })
+
+      // when
+      await recordGenAiCompletionSpan(
+        { id: "asst_no_error", modelID: "gpt-5.5", providerID: "opencode", tokens: { input: 5, output: 3 } },
+        "session-no-error",
+      )
+      await handle.shutdown()
+
+      // then
+      const contents = readFileSync(join(dir, "traces.jsonl"), "utf8")
+      const spanLine = contents.split("\n").find((line) => line.includes("gen_ai.completion.gpt-5.5"))
+      expect(spanLine).toBeDefined()
+      const parsed = JSON.parse(spanLine!)
+      expect(parsed.status.code).not.toBe(2)
+      expect(parsed.attributes["gen_ai.error"]).toBe(false)
+      expect(parsed.attributes["gen_ai.error.type"]).toBeUndefined()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("captureFirstUserPrompt", () => {

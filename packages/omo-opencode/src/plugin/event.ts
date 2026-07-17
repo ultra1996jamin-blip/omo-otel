@@ -205,10 +205,17 @@ export function createEventHandler(args: {
       });
       const messageFinished =
         typeof state.info?.finish === "string" ? state.info.finish.length > 0 : state.info?.finish === true;
+      // A failed LLM call (auth error, rate limit, aborted, ...) may never set
+      // `finish` — OpenCode's AssistantMessage carries the failure on a
+      // separate `error` field instead. Gating span recording on
+      // messageFinished alone meant errored completions never produced a
+      // span at all (not even one with UNSET status), so recordGenAiCompletionSpan
+      // couldn't mark it ERROR — there was nothing to mark.
+      const messageErrored = state.info?.error !== undefined;
       if (state.sessionID && messageFinished) {
         invalidateContextWindowUsageCache(pluginContext as PluginInput, state.sessionID);
       }
-      if (state.sessionID && state.role === "assistant" && messageFinished) {
+      if (state.sessionID && state.role === "assistant" && (messageFinished || messageErrored)) {
         void recordGenAiCompletionSpan(state.info ?? {}, state.sessionID, pluginContext.client);
       }
       if (state.sessionID && state.role === "user") {
