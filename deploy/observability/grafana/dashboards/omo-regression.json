@@ -149,7 +149,6 @@
       ],
       "timeFrom": "$scenario_a_duration",
       "timeShift": "$scenario_gap",
-      "timeShift": null,
       "title": "레이턴시 비교 — A 시나리오 (p50·p95·p99)",
       "type": "timeseries"
     },
