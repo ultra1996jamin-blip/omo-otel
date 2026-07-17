@@ -30,7 +30,7 @@
       }
     ]
   },
-  "description": "oh-my-openagent A/B 회귀 분석 — 배포 전후 응답시간·성공률·토큰 비용 비교",
+  "description": "oh-my-openagent A/B 회귀 분석 — 두 시나리오(배포 전/후, 모델 비교, 언어 비교 등) 간 응답시간·성공률·토큰 비용 비교",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 2,
@@ -71,7 +71,7 @@
       },
       "id": 2,
       "options": {
-        "content": "## A/B 회귀 분석 사용 방법\n\n1. 왼쪽 변수 패널에서 **시나리오 A 시간 범위**와 **시나리오 B 시간 범위**를 선택하세요.\n2. 아래 비교 패널이 두 시간대의 지표를 나란히 보여줍니다.\n3. 배포 이벤트(빨간 주석)를 기준으로 Before = A, After = B로 설정하면 회귀 검증이 됩니다.\n4. **에러율↑ / 레이턴시↑ / 토큰↑** 가 모두 없으면 회귀 없음으로 판단할 수 있습니다.",
+        "content": "## A/B 회귀 분석 사용 방법\n\n1. **A 시나리오 실행** → 끝나면 곧바로 **B 시나리오 실행** (예: 같은 태스크를 한국어/영어로, 또는 다른 모델로).\n2. 둘 다 끝난 뒤, 왼쪽 변수 패널에서 **A 시나리오 길이**(A를 실행한 시간), **B 시나리오 길이**(B를 실행한 시간), **A→B 간격**(A가 끝나고 B가 시작되기까지 걸린 시간, 보통 0)을 입력하세요.\n3. B는 항상 '지금'을 기준으로 최근 구간을, A는 'B 시작 시점 이전' 구간을 봅니다 — 두 구간이 겹치지 않게 자동 분리됩니다.\n4. 아래 비교 패널이 두 구간의 지표를 나란히 보여줍니다.\n5. **에러율↑ / 레이턴시↑ / 토큰↑** 가 모두 없으면 회귀 없음으로 판단할 수 있습니다.",
         "mode": "markdown"
       },
       "title": "사용 방법",
@@ -147,7 +147,8 @@
           "refId": "A3"
         }
       ],
-      "timeFrom": "$scenario_a_from",
+      "timeFrom": "$scenario_a_duration",
+      "timeShift": "$scenario_gap",
       "timeShift": null,
       "title": "레이턴시 비교 — A 시나리오 (p50·p95·p99)",
       "type": "timeseries"
@@ -221,7 +222,7 @@
           "refId": "B3"
         }
       ],
-      "timeFrom": "$scenario_b_from",
+      "timeFrom": "$scenario_b_duration",
       "timeShift": null,
       "title": "레이턴시 비교 — B 시나리오 (p50·p95·p99)",
       "type": "timeseries"
@@ -303,7 +304,8 @@
           "refId": "A"
         }
       ],
-      "timeFrom": "$scenario_a_from",
+      "timeFrom": "$scenario_a_duration",
+      "timeShift": "$scenario_gap",
       "title": "A 시나리오 — 성공률 (5m)",
       "type": "timeseries"
     },
@@ -372,7 +374,7 @@
           "refId": "B"
         }
       ],
-      "timeFrom": "$scenario_b_from",
+      "timeFrom": "$scenario_b_duration",
       "title": "B 시나리오 — 성공률 (5m)",
       "type": "timeseries"
     },
@@ -542,7 +544,8 @@
           "refId": "D"
         }
       ],
-      "timeFrom": "$scenario_a_from",
+      "timeFrom": "$scenario_a_duration",
+      "timeShift": "$scenario_gap",
       "title": "A 시나리오 — 지표 요약",
       "transformations": [
         {
@@ -718,7 +721,7 @@
           "refId": "D"
         }
       ],
-      "timeFrom": "$scenario_b_from",
+      "timeFrom": "$scenario_b_duration",
       "title": "B 시나리오 — 지표 요약",
       "transformations": [
         {
@@ -811,7 +814,9 @@
           "refId": "A"
         }
       ],
-      "title": "A vs B — 토큰 사용량 비교",
+      "timeFrom": "$scenario_a_duration",
+      "timeShift": "$scenario_gap",
+      "title": "A 시나리오 — 토큰 사용량 비교",
       "type": "stat"
     },
     {
@@ -873,7 +878,7 @@
           "refId": "B"
         }
       ],
-      "timeFrom": "$scenario_b_from",
+      "timeFrom": "$scenario_b_duration",
       "title": "B 시나리오 — 토큰 사용량 비교",
       "type": "stat"
     },
@@ -1116,80 +1121,6 @@
       ],
       "title": "선택 기간 내 모델별 최대 컨텍스트 사용률",
       "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-by-claude"
-      },
-      "description": "codemate/CodeLLMPro 같은 커스텀 프로바이더는 이 프로젝트가 컨텍스트 한도를 자동으로 알 수 없어서 위 자동 계산 패널엔 안 나옵니다. 이 패널은 왼쪽 위 '컨텍스트 한도 (수동, 토큰)' 변수에 입력한 값으로 직접 나눠서 계산합니다 — 실제 모델 문서/관리자에게 확인한 값으로 바꿔서 입력하세요.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "spanNulls": false
-          },
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.7
-              },
-              {
-                "color": "red",
-                "value": 0.9
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 54
-      },
-      "id": 44,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-by-claude"
-          },
-          "expr": "avg(omo_gen_ai_context_used_tokens{gen_ai_request_model=~\"$model_filter\", gen_ai_agent_name=~\"$agent_filter\"}) by (gen_ai_request_model, gen_ai_system) / $context_limit",
-          "legendFormat": "{{gen_ai_request_model}} ({{gen_ai_system}}) — 수동 한도 기준",
-          "refId": "A"
-        }
-      ],
-      "title": "모델별 컨텍스트 사용률 — 수동 한도 기준 ($context_limit 토큰)",
-      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -1204,76 +1135,144 @@
     "list": [
       {
         "current": {
-          "text": "now-2h",
-          "value": "now-2h"
+          "text": "10분",
+          "value": "now-10m"
         },
         "hide": 0,
         "includeAll": false,
-        "label": "A 시나리오 시작 (배포 전)",
+        "label": "A 시나리오 길이",
         "multi": false,
-        "name": "scenario_a_from",
+        "name": "scenario_a_duration",
         "options": [
           {
-            "text": "1시간 전",
+            "text": "5분",
+            "value": "now-5m"
+          },
+          {
+            "text": "10분",
+            "value": "now-10m"
+          },
+          {
+            "text": "15분",
+            "value": "now-15m"
+          },
+          {
+            "text": "30분",
+            "value": "now-30m"
+          },
+          {
+            "text": "1시간",
             "value": "now-1h"
           },
           {
-            "text": "2시간 전",
+            "text": "2시간",
             "value": "now-2h"
           },
           {
-            "text": "6시간 전",
+            "text": "6시간",
             "value": "now-6h"
           },
           {
-            "text": "12시간 전",
+            "text": "12시간",
             "value": "now-12h"
           },
           {
-            "text": "1일 전",
+            "text": "1일",
             "value": "now-1d"
           },
           {
-            "text": "2일 전",
+            "text": "2일",
             "value": "now-2d"
           },
           {
-            "text": "1주일 전",
+            "text": "1주일",
             "value": "now-1w"
           }
         ],
-        "query": "now-2h",
+        "query": "now-10m",
         "type": "custom"
       },
       {
         "current": {
-          "text": "now-30m",
-          "value": "now-30m"
+          "text": "5분",
+          "value": "5m"
+        },
+        "description": "A 시나리오가 끝나고 B 시나리오가 시작되기까지의 간격 — A 구간이 B 구간과 겹치지 않도록, A 시나리오 창을 이 값만큼 더 과거로 밀어냅니다. 보통 B 시나리오 길이와 비슷하게(또는 그보다 조금 길게) 맞추면 두 구간이 깔끔하게 분리됩니다.",
+        "hide": 0,
+        "includeAll": false,
+        "label": "A→B 간격 (A 종료 ~ B 시작)",
+        "multi": false,
+        "name": "scenario_gap",
+        "options": [
+          {
+            "text": "0분 (바로 이어짐)",
+            "value": "0m"
+          },
+          {
+            "text": "5분",
+            "value": "5m"
+          },
+          {
+            "text": "10분",
+            "value": "10m"
+          },
+          {
+            "text": "15분",
+            "value": "15m"
+          },
+          {
+            "text": "30분",
+            "value": "30m"
+          },
+          {
+            "text": "1시간",
+            "value": "1h"
+          }
+        ],
+        "query": "5m",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "5분",
+          "value": "now-5m"
         },
         "hide": 0,
         "includeAll": false,
-        "label": "B 시나리오 시작 (배포 후)",
+        "label": "B 시나리오 길이",
         "multi": false,
-        "name": "scenario_b_from",
+        "name": "scenario_b_duration",
         "options": [
           {
-            "text": "30분 전",
+            "text": "5분",
+            "value": "now-5m"
+          },
+          {
+            "text": "10분",
+            "value": "now-10m"
+          },
+          {
+            "text": "15분",
+            "value": "now-15m"
+          },
+          {
+            "text": "30분",
             "value": "now-30m"
           },
           {
-            "text": "1시간 전",
+            "text": "1시간",
             "value": "now-1h"
           },
           {
-            "text": "2시간 전",
+            "text": "2시간",
             "value": "now-2h"
           },
           {
-            "text": "6시간 전",
+            "text": "6시간",
             "value": "now-6h"
           }
         ],
-        "query": "now-30m",
+        "query": "now-5m",
         "type": "custom"
       },
       {
@@ -1342,24 +1341,6 @@
         "regex": "",
         "sort": 1,
         "type": "query"
-      },
-      {
-        "current": {
-          "text": "128000",
-          "value": "128000"
-        },
-        "description": "이 프로젝트가 컨텍스트 한도를 자동으로 알 수 없는 모델(예: 커스텀/프록시 프로바이더)을 위한 수동 입력값 — 아래 '수동 한도 기준' 패널에서 omo_gen_ai_context_used_tokens / 이 값 으로 사용률을 계산합니다. 실제 모델의 컨텍스트 윈도우 크기로 바꿔서 입력하세요.",
-        "hide": 0,
-        "label": "컨텍스트 한도 (수동, 토큰)",
-        "name": "context_limit",
-        "options": [
-          {
-            "text": "128000",
-            "value": "128000"
-          }
-        ],
-        "query": "128000",
-        "type": "textbox"
       }
     ]
   },
