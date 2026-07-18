@@ -220,4 +220,29 @@
 
 ## 외부 시스템 연계
 
-외부 연계는 사내 서빙 CodeLLM(Max/Pro/Image 3종)뿐이다(외부 공개 LLM 미사용). OpenCode가 추론 요청을 사내 LLM에 보내고, 응답의 모델·토큰이 계측되어 파이프라인으로 흐른다. 비용은 LLM 응답에 포함되지 않으므로, 실측 토큰에 대시보드 단가 변수를 곱해 산정한다.
+**네트워크 경계: 업로드/반출 차단, 조회·다운로드만 허용되는 단방향(outbound read-only) 폐쇄망.** "폐쇄망"이 인터넷을 전부 막는다는 뜻이 아니라, **나가는 조회·다운로드 요청은 허용하되 데이터 업로드·반출은 차단**되는 구조다. 이 경계 덕분에 사내 LLM 호출뿐 아니라 조회형 MCP 연동(사내 Confluence·검색, 외부 GitHub 코드검색)도 함께 가능하다 — 반대로 소스 업로드나 임의 외부 전송은 이 경계에서 차단된다.
+
+```mermaid
+flowchart LR
+    OMO["OpenCode + OMO Plugin<br/>(DS 고객사 폐쇄망 내부)"]
+
+    subgraph internal["사내 시스템"]
+        LLM["CodeLLM Max/Pro/Image<br/>(codemate 프로바이더)"]
+        Conf["sds confluence (MCP)"]
+        Search["DS Search (MCP)"]
+    end
+
+    subgraph external["외부 인터넷"]
+        GH["grep_app (MCP)<br/>GitHub 코드검색"]
+    end
+
+    OMO -->|추론 요청 · 조회| LLM
+    OMO -->|문서 조회| Conf
+    OMO -->|코드 조회| Search
+    OMO -->|코드 조회| GH
+
+    OMO -.->|"✕ 업로드·반출 차단"| GH
+```
+
+- **사내 LLM (CodeLLM Max/Pro/Image, 3종)**: 외부 공개 LLM은 미사용. OpenCode가 추론 요청을 사내 LLM에 보내고, 응답의 모델·토큰이 계측되어 파이프라인으로 흐른다. 비용은 LLM 응답에 포함되지 않으므로, 실측 토큰에 대시보드 단가 변수를 곱해 산정한다(선택 3).
+- **조회형 MCP 연동**: `sds confluence`(사내 문서 검색) · `DS Search`(사내 코드/자료 검색) · `grep_app`(GitHub 코드검색, 외부 인터넷)이 실 세션에서 사용되며, 도구 호출은 `{agent}.mcp.{server}.{tool}` 스팬으로 동일하게 계측된다(§3 실패 시나리오 1이 `grep_app` 실측 캡처). 이들 역시 네트워크 경계상 **조회·다운로드만 가능**하며, 소스코드나 사내 데이터를 이 경로로 업로드/반출하는 것은 차단된다.

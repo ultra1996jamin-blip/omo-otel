@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile agent="oh-my-openagent" version="28.0.6">
+  <diagram name="외부 시스템 연계" id="omo-external-systems">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="960" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="2" value="OMO 외부 시스템 연계 — 네트워크 경계 구조" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="10" width="700" height="34" as="geometry" />
+        </mxCell>
+
+        <mxCell id="3" value="DS 사내 폐쇄망&lt;br&gt;(OMO 배포 환경)" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fontSize=16;fontStyle=1;dashed=1;strokeColor=#4B4F56;fillColor=#f5f5f5;" vertex="1" parent="1">
+          <mxGeometry x="30" y="70" width="320" height="430" as="geometry" />
+        </mxCell>
+
+        <mxCell id="4" value="OpenCode + OMO Plugin" style="shape=component;whiteSpace=wrap;html=1;fillColor=#e0f7fa;strokeColor=#00bcd4;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="140" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="5" value="계측 스팬&lt;br&gt;{agent}.mcp.{server}.{tool}&lt;br&gt;Collector에서 PII/기밀 동일 마스킹 적용" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=16;fillColor=#FFFACD;strokeColor=#FFD700;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="260" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#0000FF;strokeWidth=2;jumpStyle=arc;" edge="1" parent="1" source="4" target="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="7" value="네트워크 경계&lt;br&gt;&lt;br&gt;✅ 조회 · 다운로드&lt;br&gt;허용&lt;br&gt;&lt;br&gt;⛔ 업로드 · 반출&lt;br&gt;차단" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;dashed=1;strokeColor=#b85450;fillColor=#f8cecc;" vertex="1" parent="1">
+          <mxGeometry x="380" y="70" width="160" height="430" as="geometry" />
+        </mxCell>
+
+        <mxCell id="8" value="사내 타 시스템 (조회 전용)" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fontSize=15;fontStyle=1;fillColor=#b2dfdb;strokeColor=#00695c;" vertex="1" parent="1">
+          <mxGeometry x="580" y="70" width="330" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="9" value="CodeLLM Max/Pro/Image&lt;br&gt;(codemate 프로바이더)" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00695c;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="115" width="290" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="10" value="sds confluence&lt;br&gt;(MCP)" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00695c;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="190" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="11" value="DS Search&lt;br&gt;(MCP)" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#00695c;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="750" y="190" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="12" value="외부 인터넷 (조회 전용)" style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=top;fontSize=15;fontStyle=1;fillColor=#ffe0b2;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="580" y="330" width="330" height="140" as="geometry" />
+        </mxCell>
+
+        <mxCell id="13" value="grep_app (MCP)&lt;br&gt;GitHub 코드검색 (외부 인터넷)" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="375" width="290" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="14" value="조회 · 다운로드&lt;br&gt;요청/응답" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;strokeColor=#000000;fontSize=12;fontStyle=1;labelBackgroundColor=none;jumpStyle=arc;" edge="1" parent="1" source="4" target="7">
+          <mxGeometry x="-0.1" relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#00695c;strokeWidth=2;jumpStyle=arc;" edge="1" parent="1" source="7" target="9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#00695c;strokeWidth=2;jumpStyle=arc;" edge="1" parent="1" source="7" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#00695c;strokeWidth=2;jumpStyle=arc;" edge="1" parent="1" source="7" target="11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;endArrow=classic;endFill=1;strokeColor=#e65100;strokeWidth=2;jumpStyle=arc;" edge="1" parent="1" source="7" target="13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="19" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0f7fa;strokeColor=#00bcd4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="20" value="OMO 계측 (내부)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="65" y="520" width="160" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="21" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#b2dfdb;strokeColor=#00695c;" vertex="1" parent="1">
+          <mxGeometry x="230" y="520" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="22" value="사내 타 시스템 (조회)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="255" y="520" width="170" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="23" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe0b2;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="430" y="520" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="24" value="외부 인터넷 (조회)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="455" y="520" width="170" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="25" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="630" y="520" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="26" value="네트워크 경계 (마스킹·정책)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="655" y="520" width="220" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
