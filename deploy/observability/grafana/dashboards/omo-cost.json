@@ -52,7 +52,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -103,7 +103,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_tokens_total[$__range]))",
           "legendFormat": "총 토큰",
@@ -116,7 +116,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -149,7 +149,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_input_tokens_total[$__range]))",
           "legendFormat": "입력",
@@ -162,7 +162,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -195,7 +195,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_output_tokens_total[$__range]))",
           "legendFormat": "출력",
@@ -208,7 +208,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "OpenCode가 실제로 보고한 비용(gen_ai.usage.cost) 합산 — 모델별 실제 요금 그대로 반영, 고정 단가 가정 없음",
       "fieldConfig": {
@@ -256,7 +256,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_cost_total[$__range]))",
           "legendFormat": "예상 비용",
@@ -269,7 +269,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -298,7 +298,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[$__range]))",
           "legendFormat": "호출 수",
@@ -311,7 +311,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -341,7 +341,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_tokens_total[10m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[10m])), 0.0001)",
           "legendFormat": "평균 토큰",
@@ -366,7 +366,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -435,7 +435,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_input_tokens_total[5m])) * 60",
           "legendFormat": "입력 토큰",
@@ -444,7 +444,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_output_tokens_total[5m])) * 60",
           "legendFormat": "출력 토큰",
@@ -453,7 +453,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_tokens_total[5m])) * 60",
           "legendFormat": "총 토큰",
@@ -466,7 +466,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -500,7 +500,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_cost_total[5m])) * 60",
           "legendFormat": "분당 예상 비용",
@@ -525,7 +525,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -565,7 +565,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum by (gen_ai_request_model) (increase(omo_gen_ai_usage_tokens_total[$__range]))",
           "instant": true,
@@ -579,7 +579,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -616,7 +616,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum by (gen_ai_request_model) (rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m]))",
           "legendFormat": "{{gen_ai_request_model}}",
@@ -641,7 +641,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "현재 사용량이 1h 평균의 3배를 초과하면 이상 신호로 판단",
       "fieldConfig": {
@@ -686,7 +686,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_gen_ai_usage_tokens_total[5m])) / clamp_min(sum(rate(omo_gen_ai_usage_tokens_total[1h])), 0.0001)",
           "legendFormat": "현재/1h평균 배수",
@@ -699,7 +699,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -749,7 +749,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_tokens_total[1d]))",
           "instant": true,
@@ -759,7 +759,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_tokens_total[7d]))",
           "instant": true,
@@ -785,7 +785,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "실제 gen_ai.usage.cost가 0이거나 보고되지 않는 커스텀/프록시 프로바이더를 위해, 입력·출력 토큰 수에 대시보드 상단의 수동 단가($price_per_1m_input, $price_per_1m_output)를 곱해 추정한 비용",
       "fieldConfig": {
@@ -833,7 +833,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total[$__range])) * $price_per_1m_output / 1000000)",
           "legendFormat": "예상 비용 (수동 단가)",
@@ -846,7 +846,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "분당 토큰 사용량 x 수동 단가로 환산한 예상 비용 추이",
       "fieldConfig": {
@@ -881,7 +881,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(rate(omo_gen_ai_usage_input_tokens_total[5m])) * 60 * $price_per_1m_input / 1000000) + (sum(rate(omo_gen_ai_usage_output_tokens_total[5m])) * 60 * $price_per_1m_output / 1000000)",
           "legendFormat": "분당 예상 비용 (수동 단가)",
@@ -907,7 +907,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "모델별로 서로 다른 단가($price_per_1m_input(_pro|_image) / $price_per_1m_output(_pro|_image))를 곱해 추정한 모델별 비용. CodeLLM Max/Pro/Image 자체는 공개 과금 기준이 없는 자체호스팅 모델이라, 동급으로 언급된 모델(Max≈GLM-5.2, Pro≈Qwen3.5-397B, Image≈Gemma4-31B)의 2026-07 기준 공식/표준 API 단가를 참고값으로 사용. 실제 CodeLLM 계약 단가가 확정되면 상단 변수만 바꿔서 갱신할 것.",
       "fieldConfig": {
@@ -939,7 +939,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_output / 1000000)",
           "legendFormat": "CodeLLM-Max (${price_per_1m_input}/${price_per_1m_output})",
@@ -948,7 +948,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_input_pro / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_output_pro / 1000000)",
           "legendFormat": "CodeLLM-Pro (${price_per_1m_input_pro}/${price_per_1m_output_pro})",
@@ -957,7 +957,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_input_image / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_output_image / 1000000)",
           "legendFormat": "CodeLLM-Image (${price_per_1m_input_image}/${price_per_1m_output_image})",
@@ -966,7 +966,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_input / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMMax\"}[$__range])) * $price_per_1m_output / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_input_pro / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMPro\"}[$__range])) * $price_per_1m_output_pro / 1000000) + (sum(increase(omo_gen_ai_usage_input_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_input_image / 1000000) + (sum(increase(omo_gen_ai_usage_output_tokens_total{gen_ai_request_model=\"CodeLLMImage\"}[$__range])) * $price_per_1m_output_image / 1000000)",
           "legendFormat": "합계 (동급 모델 공개 단가 기준)",
@@ -991,7 +991,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus-by-claude"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(omo_gen_ai_usage_tokens_total, gen_ai_request_model)",
         "hide": 0,
@@ -1013,7 +1013,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus-by-claude"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(omo_calls_total, service_name)",
         "hide": 0,
