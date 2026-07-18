@@ -147,92 +147,64 @@ classDiagram
         <<interface>>
         +export(spans, callback)
     }
-    class OtlpHttpSpanExporter {
-        OTLP/HTTP(JSON), Bun 호환
-        gRPC/proto 미의존
-    }
-    class FileSpanExporter {
-        traces.jsonl 로컬 저장
-        (폐쇄망 폴백)
-    }
+    class OtlpHttpSpanExporter
+    class FileSpanExporter
     class ConsoleSpanExporter
     SpanExporter <|.. OtlpHttpSpanExporter
     SpanExporter <|.. FileSpanExporter
     SpanExporter <|.. ConsoleSpanExporter
 
     class OtelInit {
-        otel-core/init.ts
         +initializeOtel(input) handle
         +createExporter(config) SpanExporter
     }
     OtelInit ..> SpanExporter : creates
 
-    class NullTelemetry {
-        NOOP tracer/meter
-        비활성 또는 초기화 실패 시 반환
-    }
-    OtelInit ..> NullTelemetry : returns on disabled/error
+    class NullTelemetry
+    OtelInit ..> NullTelemetry : returns
 
     class Context {
-        otel-core/context.ts
         +startSpan(name, attrs, fn)
-        +endSpanSafely(span, attrs?, error?)
-        error 시 recordException + STATUS_CODE_ERROR
+        +endSpanSafely(span, attrs, error)
     }
 
     class SessionSpanContext {
-        otel-core/session-span-context.ts
         +getContext(sessionID) Context
         +getContextAwaitingPendingBind(sessionID)
         +bindRoot(sessionID, span)
         +waitForBind(sessionID, maxWaitMs)
         +markPendingBind(sessionID)
-        위임 race를 이벤트 대기로 해결(폴링 X)
     }
-    note for SessionSpanContext "모듈 로드 시 단일 인스턴스로 export됨<br/>(sessionSpanContext = new SessionSpanContext())"
 
     class DelegateSpanRegistry {
-        otel-core/delegate-span-registry.ts
-        -spans Map~taskId, Span~
         +set(taskId, span)
         +get(taskId) Span
         +delete(taskId)
     }
 
     class GenAiUsageMetrics {
-        otel-core/gen-ai-usage-metrics.ts
-        gen-ai-context-usage-metrics.ts
         +recordGenAiUsage(input)
         +recordGenAiContextUsage(input)
-        Prometheus 카운터/게이지
     }
 
     class ModelContextLimitsCache {
-        omo-opencode/shared/model-context-limits-cache.ts
         +setModelContextLimitsCache(map)
         +getModelCacheState() state
-        provider.*.limit.context 전역 미러
     }
 
     class McpToolClassifier {
-        omo-opencode/shared/mcp-tool-classifier.ts
         +setKnownMcpServerNames(names)
-        +getMcpServerNameForTool(tool) string?
-        정규화 후 최장 접두 매칭
+        +getMcpServerNameForTool(tool) string
     }
 
     class SessionSkillUsageState {
-        omo-opencode/shared/session-skill-usage-state.ts
         +markSessionUsedSkill(sessionID)
         +hasSessionUsedSkill(sessionID) bool
     }
 
     class ToolSpanTracker {
-        omo-opencode/plugin/tool-span-tracker.ts
-        createToolSpanTracker() 팩토리 함수가 생성
         +start(input) Promise
-        +end(input, error?)
-        인자는 키 이름만 수집(값 미수집)
+        +end(input, error)
     }
     ToolSpanTracker ..> DelegateSpanRegistry : uses
     ToolSpanTracker ..> SessionSpanContext : uses
@@ -241,11 +213,8 @@ classDiagram
     ToolSpanTracker ..> SessionSkillUsageState : uses
 
     class GenAiCompletionSpan {
-        omo-opencode/plugin/gen-ai-completion-span.ts
         +recordGenAiCompletionSpan(info, sessionID)
         +captureFirstUserPrompt(info, sessionID)
-        +cleanCapturedPromptText(text)
-        +joinTextParts(parts, excludeSynthetic)
     }
     GenAiCompletionSpan ..> SessionSpanContext : uses
     GenAiCompletionSpan ..> ModelContextLimitsCache : uses
@@ -253,31 +222,56 @@ classDiagram
     GenAiCompletionSpan ..> Context : uses
 
     class EventHandler {
-        omo-opencode/plugin/event.ts
-        OpenCode 이벤트 버스 구독 (fire-and-forget)
-        message.updated → GenAiCompletionSpan
-        message.part.updated(tool error) → ToolSpanTracker.end
+        +handleMessageUpdated(event)
+        +handlePartUpdated(event)
     }
     EventHandler ..> GenAiCompletionSpan : notifies
     EventHandler ..> ToolSpanTracker : notifies
 
-    cssClass "OtlpHttpSpanExporter,FileSpanExporter,ConsoleSpanExporter,OtelInit,NullTelemetry,Context,SessionSpanContext,DelegateSpanRegistry,GenAiUsageMetrics" core
-    cssClass "ModelContextLimitsCache,McpToolClassifier,SessionSkillUsageState,ToolSpanTracker,GenAiCompletionSpan,EventHandler" mine
-    classDef core fill:#ffe6cc,stroke:#d79b00
+    cssClass "ToolSpanTracker,GenAiCompletionSpan,McpToolClassifier,SessionSkillUsageState,ModelContextLimitsCache,EventHandler" mine
+    cssClass "OtelInit,NullTelemetry,Context,SessionSpanContext,DelegateSpanRegistry,GenAiUsageMetrics,OtlpHttpSpanExporter,FileSpanExporter" core
+    cssClass "SpanExporter,ConsoleSpanExporter" oss
     classDef mine fill:#d5e8d4,stroke:#82b366
+    classDef core fill:#ffe6cc,stroke:#d79b00
+    classDef oss fill:#f5f5f5,stroke:#999999
 ```
 
-**적용된 설계 패턴** (실제 코드에서 확인된 것만 표기, 부록 A 발췌 코드 근거):
+색상: 초록 = 본인 작성(플러그인, `omo-opencode`), 주황 = 본인 작성(계측 코어, `otel-core`), 회색 = OTel SDK 표준 제공(오픈소스) — 패키지 다이어그램과 동일 컨벤션.
 
-| 패턴 | 적용 위치 | 근거 |
+**클래스 설명** (다이어그램은 구조만, 파일 경로·세부 설명은 아래 표):
+
+| 클래스 | 파일 | 역할 |
 |---|---|---|
-| **Strategy** | `SpanExporter` 인터페이스 × 3 구현체 | `OtlpHttpSpanExporter`/`FileSpanExporter`/`ConsoleSpanExporter`가 동일 인터페이스로 교체 가능한 전송 전략 (A.4) |
-| **Factory Method** | `init.ts` `createExporter(config)` | 설정값(`exporter` kind)에 따라 3개 구현체 중 하나를 생성 (A.1.1) |
-| **Null Object** | `initializeOtel()`의 NOOP 반환 | 비활성/초기화 실패 시 NOOP 트레이서·미터 반환 — 호출부가 "계측 유무"를 분기할 필요 없이 항상 안전 호출 (무중단의 구현 근거, A.1.1) |
-| **Singleton** | `sessionSpanContext` | 모듈 로드 시 단일 인스턴스 export, 세션 루트 상태를 프로세스 전역에서 공유 (A.1.4) |
-| **Registry** | `DelegateSpanRegistry` | 위임 task id ↔ Span 매핑을 관리해 비동기 완료 지점에서 조회·종료 (A.1.5) |
-| **Facade** | `context.ts`의 `startSpan`/`endSpanSafely` | OTel SDK 원시 Span API(예외 기록·상태 코드)를 감춰 호출부는 성공/실패만 전달 (A.1.3) |
-| **Observer** | `plugin/event.ts` | OpenCode 이벤트 버스(`message.updated`, `message.part.updated`)를 구독해 계측 함수를 fire-and-forget 호출 — 계측이 이벤트 발행자를 전혀 모르는 느슨한 결합 (A.6) |
+| SpanExporter | (OTel SDK 인터페이스) | 스팬 내보내기 계약 |
+| OtlpHttpSpanExporter | otel-core/otlp-http-span-exporter.ts | OTLP/HTTP(JSON) 직접 인코딩, gRPC/proto 미의존(Bun 호환) |
+| FileSpanExporter | otel-core/file-span-exporter.ts | traces.jsonl 로컬 저장(폐쇄망 폴백) |
+| ConsoleSpanExporter | (OTel SDK 기본 제공) | 콘솔 출력 |
+| OtelInit | otel-core/init.ts | SDK 초기화·exporter 선택 |
+| NullTelemetry | otel-core/init.ts 내부 | NOOP tracer/meter — 비활성 또는 초기화 실패 시 반환 |
+| Context | otel-core/context.ts | 에러 시 recordException + STATUS_CODE_ERROR 기록 |
+| SessionSpanContext | otel-core/session-span-context.ts | 세션 루트 지연 생성, 위임 race를 이벤트 대기로 해결(폴링 아님), 모듈 로드 시 단일 인스턴스로 export |
+| DelegateSpanRegistry | otel-core/delegate-span-registry.ts | taskId ↔ Span 매핑 |
+| GenAiUsageMetrics | otel-core/gen-ai-usage-metrics.ts, gen-ai-context-usage-metrics.ts | 토큰·비용 Prometheus 카운터/게이지 |
+| ModelContextLimitsCache | omo-opencode/shared/model-context-limits-cache.ts | provider.*.limit.context 전역 미러 |
+| McpToolClassifier | omo-opencode/shared/mcp-tool-classifier.ts | 정규화 후 최장 접두 매칭으로 MCP 서버명 판별 |
+| SessionSkillUsageState | omo-opencode/shared/session-skill-usage-state.ts | 세션별 skill 사용 여부(A/B 태깅) |
+| ToolSpanTracker | omo-opencode/plugin/tool-span-tracker.ts | `{agent}.hook`/`{agent}.mcp` 스팬 생성·종료, 인자는 키 이름만 수집(값 미수집) |
+| GenAiCompletionSpan | omo-opencode/plugin/gen-ai-completion-span.ts | `gen_ai.completion` 스팬 기록, `user.prompt` 턴 루트 캡처 |
+| EventHandler | omo-opencode/plugin/event.ts | OpenCode 이벤트 버스 구독(fire-and-forget) — `message.updated`→GenAiCompletionSpan, `message.part.updated`(도구 에러)→ToolSpanTracker.end |
+
+**적용된 설계 패턴** (실제 코드에서 확인된 것만 표기, 부록 A 발췌 코드 근거)
+
+| 패턴 | 정의 | 적용 위치 | 이 구조에서의 장점 |
+|---|---|---|---|
+| **Strategy** | 동일 인터페이스로 여러 알고리즘(구현)을 캡슐화해 런타임에 교체 가능하게 하는 패턴 | `SpanExporter` 인터페이스 + `OtlpHttpSpanExporter`/`FileSpanExporter`/`ConsoleSpanExporter` (A.4) | 배포 환경(온라인 OTLP vs 폐쇄망 파일 폴백)에 따라 전송 방식만 바뀌고, 그 이후의 계측 코드 전체는 어떤 exporter가 쓰이는지 전혀 몰라도 됨 — 폐쇄망 대응을 위해 기존 스팬 기록 코드를 한 줄도 고칠 필요가 없었던 이유 |
+| **Factory Method** | 객체 생성 로직을 별도 메서드로 분리해 호출부가 구체 클래스를 몰라도 되게 하는 패턴 | `init.ts`의 `createExporter(config)` (A.1.1) | 설정값(`exporter` 필드) 하나만 바꾸면 3개 구현체 중 하나가 자동 생성됨 — 분기(`if/else`)가 코드 전체에 흩어지지 않고 한 곳에 모여 유지보수 지점이 하나로 줄어듦 |
+| **Null Object** | "없음"을 null/예외 대신 아무 동작도 안 하는 실제 객체로 표현하는 패턴 | `initializeOtel()`의 NOOP tracer/meter 반환 (A.1.1) | 계측이 꺼져 있거나 초기화에 실패해도 호출부는 `if (tracer)` 같은 방어 코드 없이 항상 동일하게 호출 가능 — "관측 스택이 죽어도 에이전트 실행은 무중단"이라는 요구사항을 반환값 한 곳으로 보장 |
+| **Singleton** | 클래스의 인스턴스를 프로세스 전체에서 하나만 존재하도록 보장하는 패턴 | `sessionSpanContext` — 모듈 로드 시 단일 인스턴스 export (A.1.4) | 세션 루트 상태를 플러그인(`event.ts`)과 계측 코어(`otel-core`) 양쪽이 새 인스턴스를 만들지 않고 항상 같은 상태를 참조 — 그렇지 않으면 세션마다 루트가 따로 생겨 트레이스가 쪼개짐 |
+| **Registry** | 키로 조회 가능한 객체 저장소를 통해 생성과 사용을 분리하는 패턴 | `DelegateSpanRegistry` — taskId ↔ Span 매핑 (A.1.5) | 위임 작업을 시작한 코드와, 그 작업이 (비동기로, 다른 시점에) 끝났을 때 스팬을 종료하는 코드가 서로 직접 참조를 주고받지 않아도 됨 — taskId만 알면 비동기 완료 지점에서 스팬을 찾아 안전하게 닫을 수 있어 고아 스팬을 방지 |
+| **Facade** | 복잡한 하위 시스템을 단순한 창구 하나로 감싸는 패턴 | `context.ts`의 `startSpan`/`endSpanSafely` (A.1.3) | 호출부는 OTel SDK의 예외 기록·상태 코드 API를 몰라도 되고 성공/실패값만 넘기면 됨 — 에러 상태 기록 로직(otel.13에서 추가)을 이 한 곳만 고쳐서 전체 스팬의 실패 처리를 일괄 개선할 수 있었음 |
+| **Observer** | 이벤트 발행자와 구독자를 느슨하게 결합해 발행자가 구독자를 몰라도 되게 하는 패턴 | `plugin/event.ts`가 OpenCode 이벤트 버스(`message.updated`, `message.part.updated`)를 구독 (A.6) | OpenCode 코어는 계측 코드의 존재를 전혀 모른 채 이벤트만 발행 — 계측 로직을 통째로 빼거나 갈아끼워도 OpenCode 본체는 수정할 필요가 없음(플러그인 아키텍처가 성립하는 전제) |
+
+> 패키지 다이어그램에서 짚은 **파이프-앤-필터**(계측→수집·가공→저장·가시화가 다음 계층만 알고 이전 계층을 모름)와 **인터셉터**(마스킹이 모든 exporter 앞에서 공통 적용) 두 아키텍처 패턴도 위 7개 설계 패턴과 같은 축으로 볼 수 있다 — 전자가 "패키지 간" 결합도를 낮췄다면, 후자는 "정책과 로직"을 분리해 보안 규칙 변경이 애플리케이션 재배포 없이 가능하게 했다.
 
 ---
 
