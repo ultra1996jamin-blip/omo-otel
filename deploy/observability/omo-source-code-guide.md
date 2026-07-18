@@ -6,7 +6,7 @@
 
 ## 본인 직접 작성/수정 (심사 대상 · 약 34파일 +4,950/−6)
 
-### 계측 코어 패키지 — `packages/otel-core/src` (전체 신규 작성, 22파일 +2,135)
+### 계측 코어 패키지 — `packages/otel-core` (전체 신규 작성, 23파일 +2,203/−53)
 
 | 경로 | 역할 | 구분 |
 |---|---|---|
@@ -19,6 +19,38 @@
 | otlp-http-span/metric-exporter.ts | OTLP/HTTP(JSON) 직접 인코딩 — gRPC/proto 의존 없이 Bun 런타임 호환 | 신규 작성 |
 | file-span/metric-exporter.ts | 폐쇄망용 JSONL 로컬 저장(traces.jsonl/metrics.jsonl) | 신규 작성 |
 | *.test.ts (7파일) | 초기화·설정·컨텍스트·레지스트리·메트릭 단위 테스트(bun:test) | 신규 작성 |
+
+**디렉토리 구조** (git 이력 기준 전량 신규 파일 — 이 과제 이전에는 `otel-core` 패키지 자체가 존재하지 않았음)
+
+```
+packages/otel-core/
+├── index.d.ts                              ✅ 신규   패키지 타입 선언
+├── package.json                            ✅ 신규   패키지 매니페스트
+├── tsconfig.json                           ✅ 신규   TS 빌드 설정
+└── src/
+    ├── init.ts                             ✅ 신규   SDK 초기화 · exporter 선택 · NOOP 폴백
+    ├── init.test.ts                        ✅ 신규
+    ├── config.ts                           ✅ 신규   환경변수/파일 설정 병합 (기본값 비활성)
+    ├── config.test.ts                      ✅ 신규
+    ├── constants.ts                        ✅ 신규   기본 엔드포인트·서비스명·샘플링 상수
+    ├── context.ts                          ✅ 신규   startSpan · endSpanSafely (에러 상태 기록)
+    ├── session-span-context.ts             ✅ 신규   세션 루트 지연 생성 · 위임 race 해결(bindRoot/waitForBind)
+    ├── session-span-context.test.ts        ✅ 신규
+    ├── delegate-span-registry.ts           ✅ 신규   위임 task↔Span 매핑
+    ├── delegate-span-registry.test.ts      ✅ 신규
+    ├── gen-ai-usage-metrics.ts             ✅ 신규   토큰·비용 Prometheus 카운터
+    ├── gen-ai-usage-metrics.test.ts        ✅ 신규
+    ├── gen-ai-context-usage-metrics.ts     ✅ 신규   컨텍스트 사용률 게이지
+    ├── gen-ai-context-usage-metrics.test.ts ✅ 신규
+    ├── otlp-http-span-exporter.ts          ✅ 신규   OTLP/HTTP(JSON) 스팬 익스포터 (Bun 호환)
+    ├── otlp-http-metric-exporter.ts        ✅ 신규   OTLP/HTTP(JSON) 메트릭 익스포터
+    ├── file-span-exporter.ts               ✅ 신규   폐쇄망용 traces.jsonl 로컬 저장
+    ├── file-metric-exporter.ts             ✅ 신규   폐쇄망용 metrics.jsonl 로컬 저장
+    ├── index.ts                            ✅ 신규   패키지 공개 API 재노출
+    └── types.ts                            ✅ 신규   공용 타입 정의
+
+23/23 신규 작성 (100%) — 이 과제 범위에서 처음 생성된 패키지이므로 기존 코드 수정 없이 전량 신규
+```
 
 ### 플러그인 계측 연동 — `packages/omo-opencode/src` (12파일 +2,815/−6)
 
