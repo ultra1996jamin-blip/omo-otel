@@ -31,7 +31,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -70,7 +70,7 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -109,7 +109,7 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -148,7 +148,7 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -194,7 +194,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -224,7 +224,7 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -254,7 +254,7 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus-by-claude" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },

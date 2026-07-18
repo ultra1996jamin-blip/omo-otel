@@ -58,7 +58,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "목표: 80% 이상. accepted / (accepted + refused) × 100",
       "fieldConfig": {
@@ -112,7 +112,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "100 * rate(otelcol_receiver_accepted_spans[5m]) / clamp_min(rate(otelcol_receiver_accepted_spans[5m]) + rate(otelcol_receiver_refused_spans[5m]), 0.0001)",
           "legendFormat": "수집률 %",
@@ -125,7 +125,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "목표: 30분 이내 장애 원인 파악. agent.run p95 응답시간을 근사치로 사용.",
       "fieldConfig": {
@@ -177,7 +177,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.95, sum(rate(omo_duration_milliseconds_bucket{span_name=~\"agent\\\\.execute\\\\..*\"}[10m])) by (le))",
           "legendFormat": "p95 agent.run",
@@ -190,7 +190,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "목표: Model별 토큰/비용 실시간 확인. gen_ai.usage.total_tokens 합산.",
       "fieldConfig": {
@@ -243,7 +243,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(increase(omo_gen_ai_usage_tokens_total[1h]))",
           "legendFormat": "총 토큰",
@@ -256,7 +256,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "목표: 80% 이상. gen_ai.cot.captured=true 스팬 / 전체 llm_generate 스팬",
       "fieldConfig": {
@@ -310,7 +310,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "100 * sum(rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\",gen_ai_reasoning_present=\"true\"}[10m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[10m])), 0.0001)",
           "legendFormat": "CoT 캡처율 %",
@@ -323,7 +323,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "description": "목표: A/B 시나리오 비교 가능. 현재 agent.run 에러율 모니터링.",
       "fieldConfig": {
@@ -376,7 +376,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(100 * sum(rate(omo_calls_total{span_name=~\"agent\\\\.execute\\\\..*\", status_code=\"STATUS_CODE_ERROR\"}[10m])) / clamp_min(sum(rate(omo_calls_total{span_name=~\"agent\\\\.execute\\\\..*\"}[10m])), 0.0001)) or vector(0)",
           "legendFormat": "에러율 %",
@@ -401,7 +401,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -438,7 +438,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum by (gen_ai_agent_name) (rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m]))",
           "legendFormat": "{{gen_ai_agent_name}}",
@@ -447,7 +447,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(omo_calls_total{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m]))",
           "legendFormat": "전체",
@@ -460,7 +460,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -497,7 +497,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.50, sum(rate(omo_duration_milliseconds_bucket{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m])) by (le))",
           "legendFormat": "p50",
@@ -506,7 +506,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.90, sum(rate(omo_duration_milliseconds_bucket{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m])) by (le))",
           "legendFormat": "p90",
@@ -515,7 +515,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.99, sum(rate(omo_duration_milliseconds_bucket{span_name=~\".*gen_ai\\\\.completion\\\\..*\"}[5m])) by (le))",
           "legendFormat": "p99",
@@ -540,7 +540,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -571,7 +571,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "topk(10, sum by (hook_name) (increase(omo_calls_total{hook_name!=\"\"}[1h])))",
           "instant": true,
@@ -585,7 +585,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -622,7 +622,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "(100 * sum by (hook_name) (rate(omo_calls_total{hook_name!=\"\", status_code=\"STATUS_CODE_ERROR\"}[5m])) / clamp_min(sum by (hook_name) (rate(omo_calls_total{hook_name!=\"\"}[5m])), 0.0001)) or vector(0)",
           "legendFormat": "{{hook_name}} 에러율",
@@ -647,7 +647,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -695,7 +695,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(otelcol_receiver_accepted_spans[1m]))",
           "legendFormat": "수락됨",
@@ -704,7 +704,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(otelcol_receiver_refused_spans[1m]))",
           "legendFormat": "거부됨",
@@ -717,7 +717,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus-by-claude"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -770,7 +770,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus-by-claude"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "100 * sum by (exporter) (rate(otelcol_exporter_sent_spans[5m])) / clamp_min(sum by (exporter) (rate(otelcol_exporter_sent_spans[5m]) + rate(otelcol_exporter_send_failed_spans[5m])), 0.0001)",
           "instant": true,
@@ -795,7 +795,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "prometheus-by-claude"
+          "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(omo_omo_span_calls_total, service_name)",
         "hide": 0,
