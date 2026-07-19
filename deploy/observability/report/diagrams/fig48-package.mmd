@@ -1,0 +1,45 @@
+flowchart LR
+    subgraph target["계측 대상 (OpenCode + OMO Plugin)"]
+        opencode["«오픈소스»<br/>OpenCode 하니스<br/>(이벤트 버스·플러그인 호스트)"]
+        plugin["«본인 작성»<br/>omo-opencode/src/plugin<br/>─────<br/>event.ts<br/>gen-ai-completion-span.ts<br/>tool-span-tracker.ts<br/>tool-execute-before/after.ts"]
+        shared["«본인 작성»<br/>omo-opencode/src/shared<br/>─────<br/>mcp-tool-classifier.ts<br/>session-skill-usage-state.ts<br/>model-context-limits-cache.ts"]
+        otelcore["«본인 작성»<br/>packages/otel-core/src (계측 코어)<br/>─────<br/>init.ts · config.ts<br/>context.ts<br/>session-span-context.ts<br/>delegate-span-registry.ts<br/>gen-ai-usage-metrics.ts 등<br/>otlp-http-* · file-* exporter"]
+    end
+
+    subgraph collect["수집·가공 (OTel Collector contrib)"]
+        receiver["OTLP Receiver<br/>gRPC :4317 / HTTP :4318"]
+        masking["마스킹 가드레일 (본인 구성)<br/>redaction: PII<br/>transform(OTTL): LOT/EQPID 등"]
+        processors["Processors<br/>memory_limiter·resource·batch"]
+        spanmetrics["spanmetrics Connector<br/>스팬 → omo_* 메트릭"]
+    end
+
+    subgraph backend["저장·가시화 (폐쇄망 self-host)"]
+        jaeger["Jaeger :26686"]
+        clickhouse["ClickHouse (openlit_db)"]
+        openlit["OpenLIT :13000"]
+        prometheus["Prometheus :19090"]
+        grafana["Grafana :13001"]
+    end
+
+    opencode -.->|이벤트·훅| plugin
+    plugin --> shared
+    plugin --> otelcore
+    otelcore -->|OTLP/HTTP :14318| receiver
+    receiver --> masking --> processors
+    processors --> spanmetrics
+    processors --> jaeger
+    processors --> clickhouse
+    spanmetrics --> prometheus
+    clickhouse -.-> openlit
+    prometheus -.-> grafana
+
+    classDef mine fill:#d5e8d4,stroke:#82b366
+    classDef core fill:#ffe6cc,stroke:#d79b00
+    classDef mask fill:#f8cecc,stroke:#b85450
+    classDef oss fill:#f5f5f5,stroke:#999999
+    classDef infra fill:#ffffff,stroke:#9673a6
+    class plugin,shared mine
+    class otelcore core
+    class masking mask
+    class opencode oss
+    class jaeger,clickhouse,openlit,prometheus,grafana infra

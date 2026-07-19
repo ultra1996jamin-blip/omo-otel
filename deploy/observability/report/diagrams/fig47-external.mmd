@@ -1,0 +1,19 @@
+flowchart LR
+    OMO["OpenCode + OMO Plugin<br/>(DS 고객사 폐쇄망 내부)"]
+
+    subgraph internal["사내 시스템"]
+        LLM["CodeLLM Max/Pro/Image<br/>(codemate 프로바이더)"]
+        Conf["sds confluence (MCP)"]
+        Search["DS Search (MCP)"]
+    end
+
+    subgraph external["외부 인터넷"]
+        GH["grep_app (MCP)<br/>GitHub 코드검색"]
+    end
+
+    OMO -->|추론 요청 · 조회| LLM
+    OMO -->|문서 조회| Conf
+    OMO -->|코드 조회| Search
+    OMO -->|코드 조회| GH
+
+    OMO -.->|"✕ 업로드·반출 차단"| GH

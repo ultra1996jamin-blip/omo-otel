@@ -1,0 +1,94 @@
+classDiagram
+    direction LR
+
+    class SpanExporter {
+        <<interface>>
+        +export(spans, callback)
+    }
+    class OtlpHttpSpanExporter
+    class FileSpanExporter
+    class ConsoleSpanExporter
+    SpanExporter <|.. OtlpHttpSpanExporter
+    SpanExporter <|.. FileSpanExporter
+    SpanExporter <|.. ConsoleSpanExporter
+
+    class OtelInit {
+        +initializeOtel(input) handle
+        +createExporter(config) SpanExporter
+    }
+    OtelInit ..> SpanExporter : creates
+
+    class NullTelemetry
+    OtelInit ..> NullTelemetry : returns
+
+    class Context {
+        +startSpan(name, attrs, fn)
+        +endSpanSafely(span, attrs, error)
+    }
+
+    class SessionSpanContext {
+        +getContext(sessionID) Context
+        +getContextAwaitingPendingBind(sessionID)
+        +bindRoot(sessionID, span)
+        +waitForBind(sessionID, maxWaitMs)
+        +markPendingBind(sessionID)
+    }
+
+    class DelegateSpanRegistry {
+        +set(taskId, span)
+        +get(taskId) Span
+        +delete(taskId)
+    }
+
+    class GenAiUsageMetrics {
+        +recordGenAiUsage(input)
+        +recordGenAiContextUsage(input)
+    }
+
+    class ModelContextLimitsCache {
+        +setModelContextLimitsCache(map)
+        +getModelCacheState() state
+    }
+
+    class McpToolClassifier {
+        +setKnownMcpServerNames(names)
+        +getMcpServerNameForTool(tool) string
+    }
+
+    class SessionSkillUsageState {
+        +markSessionUsedSkill(sessionID)
+        +hasSessionUsedSkill(sessionID) bool
+    }
+
+    class ToolSpanTracker {
+        +start(input) Promise
+        +end(input, error)
+    }
+    ToolSpanTracker ..> DelegateSpanRegistry : uses
+    ToolSpanTracker ..> SessionSpanContext : uses
+    ToolSpanTracker ..> Context : uses
+    ToolSpanTracker ..> McpToolClassifier : uses
+    ToolSpanTracker ..> SessionSkillUsageState : uses
+
+    class GenAiCompletionSpan {
+        +recordGenAiCompletionSpan(info, sessionID)
+        +captureFirstUserPrompt(info, sessionID)
+    }
+    GenAiCompletionSpan ..> SessionSpanContext : uses
+    GenAiCompletionSpan ..> ModelContextLimitsCache : uses
+    GenAiCompletionSpan ..> GenAiUsageMetrics : uses
+    GenAiCompletionSpan ..> Context : uses
+
+    class EventHandler {
+        +handleMessageUpdated(event)
+        +handlePartUpdated(event)
+    }
+    EventHandler ..> GenAiCompletionSpan : notifies
+    EventHandler ..> ToolSpanTracker : notifies
+
+    cssClass "ToolSpanTracker,GenAiCompletionSpan,McpToolClassifier,SessionSkillUsageState,ModelContextLimitsCache,EventHandler" mine
+    cssClass "OtelInit,NullTelemetry,Context,SessionSpanContext,DelegateSpanRegistry,GenAiUsageMetrics,OtlpHttpSpanExporter,FileSpanExporter" core
+    cssClass "SpanExporter,ConsoleSpanExporter" oss
+    classDef mine fill:#d5e8d4,stroke:#82b366
+    classDef core fill:#ffe6cc,stroke:#d79b00
+    classDef oss fill:#f5f5f5,stroke:#999999
